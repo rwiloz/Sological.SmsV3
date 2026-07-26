@@ -14,7 +14,7 @@ listed per slice — scope-narrowing is Ray's call.
 (domain), `Sological.Sms.Tests`. EF Core + Npgsql; own database `sologicalsms` on the existing
 Azure PSQL server (local dev: local PostgreSQL). Migrations run on service start (same pattern
 as AI-Workforce System). Health endpoint. Dockerfile + container-app-ready config
-(Key Vault-backed secrets in Azure; user-secrets/env locally).
+(Key Vault-backed secrets in Azure; the shared KV **emulator** locally — design §8).
 
 Schema (design §3): `customers`, `channels`, `messages`, `delivery_events`,
 `inbound_messages`, `inbound_parts`, `billing_ledger`, `webhook_outbox`.
