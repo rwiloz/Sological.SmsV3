@@ -43,7 +43,8 @@ any customer surface.
   reference, optional, ≤64), to_number, originator_used, body, parts smallint,
   status (`queued → submitting → sent → delivered | failed | rejected | expired`),
   error_code, error_detail, upstream, upstream_id (SMS Central `ID`), requested_at,
-  submitted_at, delivered_at, failed_at, claim columns for the dispatch worker.
+  submitted_at, delivered_at, failed_at, claim columns for the dispatch worker
+  (claimed_by, claimed_at; claims LEASE-expire so a dead replica's work is reclaimed — §9).
   Index (channel_id, customer_ref), (status) partial on non-terminal.
 - **delivery_events** — id, message_id, raw_result, raw_status, raw_description, provider,
   received_at, payload jsonb. Append-only audit; the message row is the distilled truth.
@@ -187,7 +188,27 @@ non-2xx/timeouts retry per outbox backoff then `dead` (visible in ops queries + 
 - Ingress hostname: needs a public HTTPS name before S3 (e.g. `smsv2.sological.com.au` on the
   container app). ⚠ Decision for Ray.
 
-## 9. Open questions (Ray)
+## 9. HA & DR posture (ruled 2026-07-27: platform HA replaces the sms/smsdr pair)
+
+The old model ran TWO stateful boxes (`sms` + `smsdr`: IIS + SQL Server + processor each)
+with bespoke replication between them (`ReplicateSmsData`/`ModelReplicateClient`,
+`isFromDr`) because each box WAS the service. v2 separates compute from state, so that
+whole apparatus retires — **HA becomes a platform concern**, provided the design keeps the
+app-level invariants that make stateless scale-out true:
+
+| Layer | Mechanism | Owner |
+|---|---|---|
+| Service | ≥2 Container Apps replicas, health probes, rolling deploys; safe because workers are claim-based and receivers are idempotent | infra (replica count) + design (claims/idempotency — §1, §3, §5) |
+| Dispatch workers | claim columns carry a **lease expiry**; a dead replica's claims are reclaimed after timeout — no stuck messages | design (§3 messages claim columns) |
+| Upstream down | messages queue and retry with backoff — degrade to delayed, never to lost | design (§4.1 retry mapping) |
+| Ingress down briefly | SMS Central retries un-acked pushes (their duplication contract is our dedup contract, §5); short outages self-heal | design |
+| Database | Azure PostgreSQL Flexible Server zone-redundant HA option + PITR backups; no hand-rolled replication, ever | infra/runbook |
+| DNS | one stable ingress hostname; at S5 BOTH legacy names (`sms.` and `smsdr.sological.com.au`) point at the same v2 service | infra |
+
+Decision left with Ray at S1: which PSQL HA tier to pay for now (dev can ride
+single-zone + PITR; flip to zone-redundant before real customer migration at S5).
+
+## 10. Open questions (Ray)
 
 1. **Sub-account callbacks** — confirm at creation that the sub-account gets its own DLR +
    inbound forward URLs (roadmap risk; fallback design: shared receiver + discriminate by
