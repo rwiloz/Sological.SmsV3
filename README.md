@@ -13,6 +13,8 @@ First customer: AI-Workforce (its comms capability consumes the webhook egress).
 
 - **Phase: planning/design.** No code yet — docs first.
 - Docs:
+  - [Engineering guide](docs/engineering-guide.md) — onboarding: reference-repo map, coding
+    standards, secrets convention, working rules. **Start here.**
   - [Feasibility](docs/feasibility.md) — the four integration options evaluated, upstream API
     facts (reverse-engineered + verified), and the decision.
   - [Roadmap](docs/roadmap.md) — phases from SMS Central today to Sinch cutover to RCS.

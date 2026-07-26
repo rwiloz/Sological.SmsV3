@@ -17,8 +17,9 @@ customers unchanged.
 
 Slice S5: byte-compatible `isapi/submitsms.dll/sendsms|checkstatus|getsms` surface, then
 repoint `sms.sological.com.au` (and the DR name) at v2. Existing customers notice nothing;
-their traffic now flows v2 → SMS Central. Per-customer channels, API keys, IP allowlists and
-billing ledger rows exist from day one, so segregation/billing continuity is automatic.
+their traffic now flows v2 → SMS Central. Per-customer channels, API keys and billing ledger
+rows exist from day one, so segregation/billing continuity is automatic (v2 auth is API keys
+only — IP-only legacy channels get keys issued before their repoint, see plan S5).
 The Delphi box and the SLSmsApiV2 replication stack retire at the end of this phase.
 
 ## Phase 2 — Sinch Engage v1 driver + cutover (before early 2027)
