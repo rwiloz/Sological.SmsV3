@@ -26,7 +26,9 @@ idempotency at every boundary (upstream retries its pushes — duplication is th
 
 `customer` = a billing party (AI-Workforce, connectnow, …). `channel` = a customer's sending
 identity + credentials: legacy `ExternalID`-equivalent key, API keys (two live for rotation,
-stored hashed), optional IP allowlist, originator config, webhook config, upstream selection.
+stored hashed), originator config, webhook config, upstream selection. **Auth is API keys
+ONLY — no IP allowlisting in v2 (ruled 2026-07-27)**; the legacy `SMSValidIP` mechanism dies
+with the Delphi box (consequence recorded at S5).
 Every row in every table hangs off `channel_id` (and denormalized `customer_id` where queries
 need it). Segregation is row-level + per-channel keys; there is no cross-channel read path on
 any customer surface.
@@ -36,8 +38,7 @@ any customer surface.
 - **customers** — id, code (short, unique), name, status, created_at.
 - **channels** — id, customer_id, key (unique; the auth handle), description,
   originator (≤11 alnum | `shared` | dedicated number), api_key_1_hash, api_key_2_hash,
-  allowed_ips text[] (empty = any), webhook_url, webhook_secret_name, upstream
-  (`smscentral` now), status, created_at.
+  webhook_url, webhook_secret_name, upstream (`smscentral` now), status, created_at.
 - **messages** — id uuid (≡ upstream REFERENCE), channel_id, customer_ref (caller's own
   reference, optional, ≤64), to_number, originator_used, body, parts smallint,
   status (`queued → submitting → sent → delivered | failed | rejected | expired`),
@@ -135,7 +136,7 @@ honest transport. (Upstream blacklist additions arrive as 519 rejects and surfac
 
 ### 6.1 Send
 
-`POST /api/v1/messages` — headers `X-Api-Key` (+ optional IP allowlist). Body:
+`POST /api/v1/messages` — header `X-Api-Key` (the ONLY customer auth mechanism). Body:
 `{ to, body, reference?, originator? }` → `202 { messageId, parts, status: "queued" }`.
 `GET /api/v1/messages/{id}` → full status. `reference` is the CALLER's correlation handle,
 echoed on every webhook; uniqueness per channel enforced (409 on reuse — the Delphi world's

@@ -67,8 +67,11 @@ present (window heuristic stays as fallback).
 
 Byte-compatible `isapi/submitsms.dll/sendsms`, `checkstatus`, `getsms` routes mapped onto the
 v2 store (status letters N/S/D/F/E/I; `getsms` consume-once semantics preserved; tab-separated
-response shapes exact). Channel = legacy `ExternalID`; ApiKey1/2 + IP allowlist honored.
-Import script: `SMSChannel`/`SMSValidIP` rows → `customers`/`channels`.
+response shapes exact). Channel = legacy `ExternalID`; ApiKey1/2 honored. **No IP allowlisting
+in v2 (ruled 2026-07-27)** — `SMSValidIP` is not carried, so any legacy channel that
+authenticates by IP alone today (the Delphi code only checks ApiKey when one is set) MUST be
+issued API keys before its repoint. That key-issuance sweep is a migration prerequisite on the
+customer checklist, not code. Import script: `SMSChannel` rows → `customers`/`channels`.
 
 - **Surfaces:** the three legacy routes on the legacy hostnames (`sms.sological.com.au`,
   `smsdr.sological.com.au` both → v2).

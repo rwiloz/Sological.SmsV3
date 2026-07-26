@@ -35,10 +35,11 @@ YARP, seed ratchet) — **does not apply here**. What DOES apply in this repo:
 - **Type safety**: nullable enabled everywhere; no `dynamic`; config via `IOptions<T>` (no
   `Configuration["magic:string"]` outside Program wiring); DTOs are `record`s with `required`;
   jsonb columns map to typed objects (raw-string jsonb needs a documented ruling).
-- **Auth here is per-channel API keys** (hashed, two live for rotation) + optional IP
-  allowlist + HMAC-signed outbound webhooks — there is no user JWT plane. Endpoints are
-  secure-by-default: anything not a customer surface or a provider ingress route requires
-  explicit justification for being reachable.
+- **Auth here is per-channel API keys ONLY** (hashed, two live for rotation) + HMAC-signed
+  outbound webhooks — no IP allowlisting (Ray ruled 2026-07-27; legacy `SMSValidIP` dies with
+  the Delphi box), and there is no user JWT plane. Endpoints are secure-by-default: anything
+  not a customer surface or a provider ingress route requires explicit justification for
+  being reachable.
 - **Background workers**: inherit `BackgroundService`, scope per iteration via
   `IServiceScopeFactory`, `Task.Delay(interval, stoppingToken)`, catch `OperationCanceledException`
   separately, log-never-swallow. Workers claim rows (claim columns), safe for scale-out.
