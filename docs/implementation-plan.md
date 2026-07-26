@@ -71,7 +71,10 @@ response shapes exact). Channel = legacy `ExternalID`; ApiKey1/2 honored. **No I
 in v2 (ruled 2026-07-27)** — `SMSValidIP` is not carried, so any legacy channel that
 authenticates by IP alone today (the Delphi code only checks ApiKey when one is set) MUST be
 issued API keys before its repoint. That key-issuance sweep is a migration prerequisite on the
-customer checklist, not code. Import script: `SMSChannel` rows → `customers`/`channels`.
+customer checklist, not code — **the sweep list is known: channels 2, 7, 8, 46, 47, 52 (+ Test)**,
+per [legacy-db-findings](legacy-db-findings.md). Import script: ACTIVE `SMSChannel` rows only
+(the findings table; 62 dead channels archive, don't migrate). Legacy emulation ACCEPTS
+duplicate refs (legacy callers reuse them heavily) — ref-uniqueness is new-API-only.
 
 - **Surfaces:** the three legacy routes on the legacy hostnames (`sms.sological.com.au`,
   `smsdr.sological.com.au` both → v2).

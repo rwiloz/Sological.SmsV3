@@ -140,8 +140,10 @@ honest transport. (Upstream blacklist additions arrive as 519 rejects and surfac
 `POST /api/v1/messages` — header `X-Api-Key` (the ONLY customer auth mechanism). Body:
 `{ to, body, reference?, originator? }` → `202 { messageId, parts, status: "queued" }`.
 `GET /api/v1/messages/{id}` → full status. `reference` is the CALLER's correlation handle,
-echoed on every webhook; uniqueness per channel enforced (409 on reuse — the Delphi world's
-silent duplicate refs die here).
+echoed on every webhook; uniqueness per channel enforced (409 on reuse) **on this NEW surface
+only** — the S5 legacy emulation must keep accepting duplicate refs, because legacy callers
+reuse them constantly (59k dups/12m on the biggest channel —
+[legacy-db-findings](legacy-db-findings.md)).
 
 ### 6.2 Webhooks (signed: `X-Sms-Signature: hmac-sha256=<hex>` over the raw body, per-channel secret)
 
