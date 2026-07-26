@@ -1,6 +1,7 @@
 # Roadmap — SMS Central today → Sinch cutover → RCS
 
 **Created:** 2026-07-27
+**Modified:** 2026-07-27
 **Status:** AGREED direction (Ray, 2026-07-27 sitting); dates indicative except the hard one:
 SMS Central discontinues → Sinch migration must complete **early 2027**.
 

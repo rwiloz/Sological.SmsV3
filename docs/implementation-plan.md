@@ -1,6 +1,7 @@
 # Implementation plan — slices S1–S7
 
 **Created:** 2026-07-27
+**Modified:** 2026-07-27
 **Status:** S1–S4 designed ([design-sms-central.md](design-sms-central.md)); S5–S7 planned.
 
 Rules of the road: each slice lands complete and verified (suite green + the slice's named

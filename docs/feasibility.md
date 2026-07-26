@@ -1,6 +1,7 @@
 # Feasibility — SMS inbound + delivery receipts, and where the rewrite lands
 
 **Created:** 2026-07-27
+**Modified:** 2026-07-27
 **Status:** DECIDED — build Sological SMS v2 (this repo), SMS Central upstream first.
 
 The trigger: AI-Workforce's comms capability needs SMS **inbound** and **delivery receipts**

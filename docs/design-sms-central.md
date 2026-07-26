@@ -1,6 +1,7 @@
 # Design — first step: v2 core on SMS Central (slices S1–S4)
 
 **Created:** 2026-07-27
+**Modified:** 2026-07-27
 **Status:** PROPOSED — awaiting Ray's sign-off before S1 code.
 
 ## 1. Shape
@@ -173,9 +174,13 @@ non-2xx/timeouts retry per outbox backoff then `dead` (visible in ops queries + 
 
 ## 8. Config & secrets
 
-- Azure: Key Vault (existing) — `SmsV2:SmsCentral:Username|Password`, per-channel
-  `SmsV2:Webhook:{channelKey}` secret, DB connection. Local: user-secrets/env; the KV
-  emulator pattern can ride later if wanted.
+- Secrets: `SmsV2:SmsCentral:Username|Password`, per-channel `SmsV2:Webhook:{channelKey}`,
+  DB connection. Azure: real Key Vault. **Local: the shared Azure Key Vault emulator**
+  (`https://localhost:4997`, container `aiworkforce-keyvault-emulator` — the established
+  local secret home across Ray's services). Config pipeline loads KV whenever
+  `AzureKeyVault:VaultUri` is set, emulator-aware (non-`vault.azure.net` host ⇒ emulator
+  token credential, non-fatal load); vault loads after env vars; hermetic test harnesses
+  blank the URI. Pattern source: Billing `Program.cs` / AI-Workforce `cbb2994d3`.
 - Channel/customer rows are data (seeded by SQL/import script until S7 admin) — no
   channel config in appsettings, ever (the registry-row lesson from AI-Workforce comms).
 - Ingress hostname: needs a public HTTPS name before S3 (e.g. `smsv2.sological.com.au` on the
