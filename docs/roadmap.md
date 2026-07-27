@@ -24,6 +24,16 @@ The Delphi box and the SLSmsApiV2 replication stack retire at the end of this ph
 
 ## Phase 2 — Sinch Engage v1 driver + cutover (before early 2027)
 
+**Evidence 2026-07-27 (S3 setup):** the NEW sub-account's portal shows "API base URL
+https://au.app.api.sinch.com/" (legacy alias api.messagemedia.com still honored) — the
+sub-account is natively a Sinch MessageMedia platform account exposing the Engage v1 REST
+surface alongside the wrapper API. Consequences: the S6 driver can be built and
+contract-tested against THIS account (the credited-Sync-test-account prerequisite likely
+falls away), and cutover for v2's own traffic may reduce to a per-channel driver flip on
+the SAME account (same numbers/sender IDs/webhooks) — the "no parallel run" constraint
+belonged to the legacy MAIN account's migration. Staging when convenient: mint REST API
+key+secret in the portal → `SologicalSms--Sinch--ApiKey|ApiSecret` in the secret store.
+
 Slice S6: the second upstream driver against **Engage v1 on the AU instance**
 (`au.app.api.sinch.com`) — near-free after the SMS Central driver (same concepts:
 `metadata`≈`REFERENCE`, webhooks + poll+confirm catch-up, statuses map 1:1 onto v2's message
