@@ -70,9 +70,11 @@ YARP, seed ratchet) — **does not apply here**. What DOES apply in this repo:
   Ops scripts to crib: AI-Workforce `setup_keyvault_emulator.ps1` / `seed_keyvault_emulator.ps1`.
 - Secret names: `SmsV2:SmsCentral:Username|Password`, `SmsV2:Sinch:ApiKey` (S6),
   `SmsV2:Webhook:{channelKey}`, DB connection. Azure = real Key Vault, same names.
-- **DB connection key is namespaced**: `SologicalSMS:ConnectionStrings:DefaultConnection`
-  (local: the User-scoped `SologicalSMS__ConnectionStrings__DefaultConnection` env var,
-  set 2026-07-27). The service deliberately does NOT read the plain
+- **DB connection key is namespaced**: `SologicalSms:ConnectionStrings:DefaultConnection`
+  (local: the User-scoped `SologicalSms__ConnectionStrings__DefaultConnection` env var,
+  set 2026-07-27 — canonical casing is `SologicalSms`; IConfiguration lookups are
+  case-insensitive but raw env reads on Linux are not, so keep the spelling exact).
+  The service deliberately does NOT read the plain
   `ConnectionStrings:DefaultConnection` — on the dev machine that env var belongs to
   AI-Workforce and points at ITS database; an un-namespaced read would migrate our schema
   into it (Billing avoids the same trap via its `BillingMock:` prefix). Local database

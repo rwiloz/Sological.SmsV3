@@ -11,7 +11,9 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<Sms
 {
     public SmsDbContext CreateDbContext(string[] args)
         => new(BuildOptions(
-            Environment.GetEnvironmentVariable("SologicalSMS__ConnectionStrings__DefaultConnection")
+            // Exact casing matters here (unlike IConfiguration keys) — raw env reads are
+            // case-sensitive on Linux. Canonical spelling: SologicalSms (Ray, 2026-07-27).
+            Environment.GetEnvironmentVariable("SologicalSms__ConnectionStrings__DefaultConnection")
             ?? "Host=localhost;Database=sologicalsms;Username=postgres;Password=postgres"));
 
     /// <summary>The one place the provider wiring (dynamic JSON + snake_case) is defined

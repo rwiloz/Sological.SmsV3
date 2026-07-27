@@ -51,11 +51,11 @@ try
     }
 
     // ── Database ───────────────────────────────────────────────────────────────
-    // Namespaced key ONLY (SologicalSMS__ConnectionStrings__DefaultConnection): the shared
+    // Namespaced key ONLY (SologicalSms__ConnectionStrings__DefaultConnection): the shared
     // local dev server sets a machine-wide plain ConnectionStrings__DefaultConnection that
     // points at ANOTHER service's database — reading the un-namespaced key would silently
     // migrate this schema into it (same reason Billing namespaces under BillingMock:).
-    var connectionString = builder.Configuration["SologicalSMS:ConnectionStrings:DefaultConnection"]
+    var connectionString = builder.Configuration["SologicalSms:ConnectionStrings:DefaultConnection"]
         ?? "Host=localhost;Database=sologicalsms;Username=postgres;Password=postgres";
 
     var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
