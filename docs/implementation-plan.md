@@ -45,7 +45,9 @@ Schema (design §3): `customers`, `channels`, `messages`, `delivery_events`,
 
 Customer send API (`POST /api/v1/messages`, per-channel API key auth) → message row →
 dispatch worker: **pre-dispatch guards first** (duplicate detection + local recipient
-validation — design §6.1a, terminal + unbilled) → `ISmsUpstream` seam → **SmsCentralUpstream**
+validation + **originator whitelist** — design §6.1a, terminal + unbilled; whitelist ruled
+2026-07-27, ACMA sender-ID enforcement, table ships in this slice's migration) →
+`ISmsUpstream` seam → **SmsCentralUpstream**
 (POST `wrapper/sms`, `REFERENCE` = our message id) → status transitions + billing ledger row
 (parts counted by GSM7/UCS-2 rules). Send status query API.
 

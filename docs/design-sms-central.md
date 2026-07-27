@@ -160,6 +160,13 @@ and **excluded from the billing ledger**:
 - **Local recipient validation**: AU-mobile shape (`04` + 10 digits) or `+`-international,
   `0400000000` sentinel rejected → status `rejected`, error `invalid_recipient` — saves the
   upstream round-trip (legacy `I` before the upstream's 525 ever fires).
+- **Originator whitelist (ruled 2026-07-27 — ACMA is now enforcing sender-ID compliance)**:
+  the resolved originator (channel default, or the per-message `originator` override from
+  §6.1) must match an explicit Ray-controlled whitelist — data (DB rows seeded like
+  channels), never appsettings. No match → terminal `rejected`, error `invalid_originator`,
+  unbilled, never submitted. Alphanumeric sender IDs only enter the whitelist once
+  registered on the ACMA SMS Sender ID Register; the whitelist table + guard land with S2's
+  migration. (Intersects §10 Q2: whatever originator AI-Workforce gets must be whitelisted.)
 
 ### 6.2 Webhooks (signed: `X-Sms-Signature: hmac-sha256=<hex>` over the raw body, per-channel secret)
 
