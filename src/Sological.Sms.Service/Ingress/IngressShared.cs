@@ -53,33 +53,47 @@ public static class IngressShared
             return parameters;
         }
 
-        if (request.ContentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
+        // Anything else: read the body and TRY JSON regardless of the declared
+        // content-type (the webhook engine's declaration proved untrustworthy at the
+        // live gate). If nothing parses, the raw body is preserved in the payload — a
+        // push is never silently reduced to {} again.
+        string raw;
+        using (var reader = new StreamReader(request.Body))
+            raw = (await reader.ReadToEndAsync()).Trim();
+        if (raw.Length == 0)
+            return parameters;
+
+        var before = parameters.Count;
+        try
         {
-            try
+            using var doc = System.Text.Json.JsonDocument.Parse(raw);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
             {
-                using var doc = await System.Text.Json.JsonDocument.ParseAsync(request.Body);
-                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                foreach (var property in doc.RootElement.EnumerateObject())
                 {
-                    foreach (var property in doc.RootElement.EnumerateObject())
+                    if (property.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
                     {
-                        if (property.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
-                        {
-                            foreach (var child in property.Value.EnumerateObject())
-                                parameters.TryAdd($"{property.Name}.{child.Name}", JsonScalar(child.Value));
-                        }
-                        else
-                        {
-                            parameters.TryAdd(property.Name, JsonScalar(property.Value));
-                        }
+                        foreach (var child in property.Value.EnumerateObject())
+                            parameters.TryAdd($"{property.Name}.{child.Name}", JsonScalar(child.Value));
                     }
-                    if (parameters.TryGetValue("METADATA.REFERENCE", out var reference))
-                        parameters.TryAdd("REFERENCE", reference);
+                    else
+                    {
+                        parameters.TryAdd(property.Name, JsonScalar(property.Value));
+                    }
                 }
+                if (parameters.TryGetValue("METADATA.REFERENCE", out var reference))
+                    parameters.TryAdd("REFERENCE", reference);
             }
-            catch (System.Text.Json.JsonException)
-            {
-                // Unparseable body — the caller stores what it has; never 500.
-            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // fall through to raw capture
+        }
+
+        if (parameters.Count == before)
+        {
+            parameters["_raw"] = raw.Length <= 4000 ? raw : raw[..4000];
+            parameters["_contentType"] = request.ContentType ?? "";
         }
         return parameters;
     }

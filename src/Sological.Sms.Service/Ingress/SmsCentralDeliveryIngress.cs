@@ -24,6 +24,7 @@ public sealed class SmsCentralDeliveryIngress(
         var failure = IngressShared.CheckVerification(ctx.Request, p, smsCentral.Value, ingressOptions.Value);
         if (failure is not null) return failure;
         IngressShared.RedactCredentials(p);
+        p["_slverify"] = ctx.Request.Headers[IngressShared.VerifyHeaderName].Count > 0 ? "present" : "absent";
 
         var reference = p.GetValueOrDefault("REFERENCE", "");
         var upstreamId = p.GetValueOrDefault("ID", "");

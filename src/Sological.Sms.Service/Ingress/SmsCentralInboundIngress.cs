@@ -23,6 +23,7 @@ public sealed class SmsCentralInboundIngress(
         var failure = IngressShared.CheckVerification(ctx.Request, payload, smsCentral.Value, ingressOptions.Value);
         if (failure is not null) return failure;
         IngressShared.RedactCredentials(payload);
+        payload["_slverify"] = ctx.Request.Headers[IngressShared.VerifyHeaderName].Count > 0 ? "present" : "absent";
 
         var from = payload.GetValueOrDefault("ORIGINATOR", "");
         var to = payload.GetValueOrDefault("RECIPIENT", "");
