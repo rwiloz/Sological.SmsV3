@@ -74,6 +74,13 @@ public class DeliveryVerdictMappingTests
     [InlineData("", "DELIVERD", DeliveryVerdict.Delivered)]
     [InlineData("", "BUFFRED", DeliveryVerdict.Sent)]
     [InlineData("", "FAILED", DeliveryVerdict.Failed)]
+    // Modern webhook-engine word statuses (templated pushes carry no RESULT):
+    [InlineData(null, "delivered", DeliveryVerdict.Delivered)]
+    [InlineData(null, "enroute", DeliveryVerdict.Sent)]
+    [InlineData(null, "submitted", DeliveryVerdict.Sent)]
+    [InlineData(null, "rejected", DeliveryVerdict.Rejected)]
+    [InlineData(null, "expired", DeliveryVerdict.Expired)]
+    [InlineData(null, "failed", DeliveryVerdict.Failed)]
     public void Maps(string? result, string? status, DeliveryVerdict expected)
         => SmsCentralDeliveryIngress.MapVerdict(result, status).Should().Be(expected);
 

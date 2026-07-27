@@ -30,19 +30,62 @@ public static class IngressShared
     /// Central's retry engine (their duplication contract, design §5).</summary>
     public static IResult Ack() => Results.Text("0");
 
-    /// <summary>SMS Central pushes GET with query params historically; their current
-    /// portal also offers POST — accept both, form fields merged under the query
-    /// (query wins on duplicates). The returned dictionary is also the stored payload.</summary>
+    /// <summary>SMS Central pushes GET with query params historically; the modern webhook
+    /// engine POSTs templated bodies as FORM_ENCODED or JSON — accept all three, body
+    /// fields merged under the query (query wins on duplicates). Flat JSON values map
+    /// verbatim; one level of nesting flattens to `PARENT.child`, and a nested
+    /// `METADATA.REFERENCE` (the Velocity metadata dump) is promoted to `REFERENCE` so
+    /// correlation works if the platform round-trips our uuid there. The returned
+    /// dictionary is also the stored payload.</summary>
     public static async Task<Dictionary<string, string>> ReadParamsAsync(HttpRequest request)
     {
-        var parameters = request.Query.ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
-        if (HttpMethods.IsPost(request.Method) && request.HasFormContentType)
+        // Case-insensitive: templated pushes are hand-typed in the portal.
+        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in request.Query)
+            parameters[kv.Key] = kv.Value.ToString();
+        if (!HttpMethods.IsPost(request.Method))
+            return parameters;
+
+        if (request.HasFormContentType)
         {
             foreach (var field in await request.ReadFormAsync())
                 parameters.TryAdd(field.Key, field.Value.ToString());
+            return parameters;
+        }
+
+        if (request.ContentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            try
+            {
+                using var doc = await System.Text.Json.JsonDocument.ParseAsync(request.Body);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    foreach (var property in doc.RootElement.EnumerateObject())
+                    {
+                        if (property.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
+                        {
+                            foreach (var child in property.Value.EnumerateObject())
+                                parameters.TryAdd($"{property.Name}.{child.Name}", JsonScalar(child.Value));
+                        }
+                        else
+                        {
+                            parameters.TryAdd(property.Name, JsonScalar(property.Value));
+                        }
+                    }
+                    if (parameters.TryGetValue("METADATA.REFERENCE", out var reference))
+                        parameters.TryAdd("REFERENCE", reference);
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Unparseable body — the caller stores what it has; never 500.
+            }
         }
         return parameters;
     }
+
+    private static string JsonScalar(System.Text.Json.JsonElement element)
+        => element.ValueKind == System.Text.Json.JsonValueKind.String ? element.GetString()! : element.GetRawText();
 
     public const string VerifyHeaderName = "SLVERIFY";
 

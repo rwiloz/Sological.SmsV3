@@ -79,7 +79,9 @@ public sealed class SmsCentralDeliveryIngress(
 
     /// <summary>RESULT first, STATUS refines (design §5.1; precedence the legacy gateway
     /// proved out). 503 is documented as expiry → expired, the rest of 5xx/550 → failed.
-    /// Their docs spell DELIVRD and DELIVERD in different places — accept both.</summary>
+    /// Their docs spell DELIVRD and DELIVERD in different places — accept both. The
+    /// modern webhook engine sends word statuses instead (delivered/enroute/…), mapped
+    /// here too so templated pushes need no RESULT at all.</summary>
     public static DeliveryVerdict? MapVerdict(string? rawResult, string? rawStatus)
     {
         if (rawResult == "1") return DeliveryVerdict.Delivered;
@@ -92,9 +94,11 @@ public sealed class SmsCentralDeliveryIngress(
 
         return rawStatus?.ToUpperInvariant() switch
         {
-            "DELIVRD" or "DELIVERD" => DeliveryVerdict.Delivered,
-            "BUFFRED" => DeliveryVerdict.Sent,
+            "DELIVRD" or "DELIVERD" or "DELIVERED" => DeliveryVerdict.Delivered,
+            "BUFFRED" or "ENROUTE" or "SUBMITTED" => DeliveryVerdict.Sent,
             "FAILED" => DeliveryVerdict.Failed,
+            "REJECTED" => DeliveryVerdict.Rejected,
+            "EXPIRED" => DeliveryVerdict.Expired,
             _ => null,
         };
     }
@@ -131,17 +135,22 @@ public sealed class SmsCentralDeliveryIngress(
                 logger.LogInformation("Message {MessageId} delivered", message.Id);
                 return;
 
-            case DeliveryVerdict.Failed or DeliveryVerdict.Expired:
+            case DeliveryVerdict.Failed or DeliveryVerdict.Expired or DeliveryVerdict.Rejected:
                 if (message.Status == MessageStatus.Delivered)
                 {
                     logger.LogWarning("{Verdict} receipt for message {MessageId} already delivered — audit only",
                         verdict, message.Id);
                     return;
                 }
-                if (message.Status is MessageStatus.Failed or MessageStatus.Expired)
+                if (message.Status is MessageStatus.Failed or MessageStatus.Expired or MessageStatus.Rejected)
                     return;
 
-                message.Status = verdict == DeliveryVerdict.Expired ? MessageStatus.Expired : MessageStatus.Failed;
+                message.Status = verdict switch
+                {
+                    DeliveryVerdict.Expired => MessageStatus.Expired,
+                    DeliveryVerdict.Rejected => MessageStatus.Rejected,
+                    _ => MessageStatus.Failed,
+                };
                 message.ErrorCode = IngressShared.Truncate(rawResult, 32) ?? IngressShared.Truncate(rawStatus, 32);
                 message.ErrorDetail = rawDescription.Length > 0 ? rawDescription : rawStatus;
                 message.FailedAt = DateTimeOffset.UtcNow;

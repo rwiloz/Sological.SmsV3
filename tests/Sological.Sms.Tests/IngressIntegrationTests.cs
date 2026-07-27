@@ -279,6 +279,28 @@ public sealed class IngressIntegrationTests(IngressPostgresFixture fixture)
         stored.Payload["USERNAME"].Should().Be("***");
     }
 
+    [Fact]
+    public async Task Dlr_JsonTemplatedPush_ModernStatus_MetadataReferencePromoted()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+        var id = await SendToSentAsync(factory, client, ch, "0412000009", "json dlr");
+
+        // The modern webhook engine's templated JSON, byte-for-byte as the portal
+        // template emits it: word status, no RESULT, REFERENCE inside the METADATA dump.
+        var refN = id.ToString("N");
+        var json = "{\"ID\":\"jdr-" + refN + "\",\"STATUS\":\"delivered\",\"STATUSDESCRIPTION\":\"221\"," +
+                   "\"METADATA\":{\"REFERENCE\":\"" + refN + "\"}}";
+        var response = await client.PostAsync("/ingress/smscentral/delivery",
+            new StringContent(json, Encoding.UTF8, "application/json"));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Be("0");
+
+        (await GetStatusAsync(client, ch.ApiKey, id)).Status.Should().Be(MessageStatus.Delivered);
+    }
+
     // ── Inbound receiver ─────────────────────────────────────────────────────
 
     [Fact]
