@@ -10,7 +10,9 @@ namespace Sological.Sms.Service.Data;
 public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<SmsDbContext>
 {
     public SmsDbContext CreateDbContext(string[] args)
-        => new(BuildOptions("Host=localhost;Database=sologicalsms;Username=postgres;Password=postgres"));
+        => new(BuildOptions(
+            Environment.GetEnvironmentVariable("SologicalSMS__ConnectionStrings__DefaultConnection")
+            ?? "Host=localhost;Database=sologicalsms;Username=postgres;Password=postgres"));
 
     /// <summary>The one place the provider wiring (dynamic JSON + snake_case) is defined
     /// for non-host callers; Program.cs mirrors it for the running service.</summary>

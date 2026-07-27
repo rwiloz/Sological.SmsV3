@@ -70,6 +70,14 @@ YARP, seed ratchet) — **does not apply here**. What DOES apply in this repo:
   Ops scripts to crib: AI-Workforce `setup_keyvault_emulator.ps1` / `seed_keyvault_emulator.ps1`.
 - Secret names: `SmsV2:SmsCentral:Username|Password`, `SmsV2:Sinch:ApiKey` (S6),
   `SmsV2:Webhook:{channelKey}`, DB connection. Azure = real Key Vault, same names.
+- **DB connection key is namespaced**: `SologicalSMS:ConnectionStrings:DefaultConnection`
+  (local: the User-scoped `SologicalSMS__ConnectionStrings__DefaultConnection` env var,
+  set 2026-07-27). The service deliberately does NOT read the plain
+  `ConnectionStrings:DefaultConnection` — on the dev machine that env var belongs to
+  AI-Workforce and points at ITS database; an un-namespaced read would migrate our schema
+  into it (Billing avoids the same trap via its `BillingMock:` prefix). Local database
+  `sologicalsms` lives on the shared local PG server on 5432 (the `airflow-postgres`
+  container, which also hosts `aiworkforce`/`utility_billing`), created 2026-07-27.
 - Channel/customer config is **data** (DB rows), never appsettings. No secrets in tracked
   files, ever — appsettings carry secret NAMES/references only.
 
