@@ -20,16 +20,16 @@ public sealed class SmsCentralDeliveryIngress(
 {
     public async Task<IResult> HandleAsync(HttpContext ctx, CancellationToken ct)
     {
-        var q = ctx.Request.Query;
-        var failure = IngressShared.CheckCredentials(q, smsCentral.Value, ingressOptions.Value);
+        var p = await IngressShared.ReadParamsAsync(ctx.Request);
+        var failure = IngressShared.CheckCredentials(p, smsCentral.Value, ingressOptions.Value);
         if (failure is not null) return failure;
 
-        var reference = q["REFERENCE"].ToString();
-        var upstreamId = q["ID"].ToString();
-        var udh = q["UDH"].ToString();
-        var rawResult = q["RESULT"].ToString();
-        var rawStatus = q["STATUS"].ToString();
-        var rawDescription = q["STATUSDESCRIPTION"].ToString();
+        var reference = p.GetValueOrDefault("REFERENCE", "");
+        var upstreamId = p.GetValueOrDefault("ID", "");
+        var udh = p.GetValueOrDefault("UDH", "");
+        var rawResult = p.GetValueOrDefault("RESULT", "");
+        var rawStatus = p.GetValueOrDefault("STATUS", "");
+        var rawDescription = p.GetValueOrDefault("STATUSDESCRIPTION", "");
 
         // Idempotency BEFORE ack (design §5): their retry-on-silence is a duplication
         // engine; natural key is (ID, REFERENCE, part).
@@ -60,7 +60,7 @@ public sealed class SmsCentralDeliveryIngress(
             RawStatus = IngressShared.Truncate(rawStatus, 32),
             RawDescription = IngressShared.Truncate(rawDescription, 500),
             Provider = "smscentral",
-            Payload = q.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+            Payload = p,
         });
 
         if (message is null && reference.Length > 0)

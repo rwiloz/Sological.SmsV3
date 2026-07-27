@@ -24,14 +24,28 @@ public static class IngressShared
     /// Central's retry engine (their duplication contract, design §5).</summary>
     public static IResult Ack() => Results.Text("0");
 
-    /// <summary>Creds arrive in the query string on their model (USERNAME or USER_NAME —
-    /// the legacy gateway read the underscore spelling). Validate when present; reject
-    /// mismatches; absence is tolerated unless RequireCredentials.</summary>
-    public static IResult? CheckCredentials(IQueryCollection query, SmsCentralOptions creds, IngressOptions options)
+    /// <summary>SMS Central pushes GET with query params historically; their current
+    /// portal also offers POST — accept both, form fields merged under the query
+    /// (query wins on duplicates). The returned dictionary is also the stored payload.</summary>
+    public static async Task<Dictionary<string, string>> ReadParamsAsync(HttpRequest request)
     {
-        var user = query["USERNAME"].ToString();
-        if (user.Length == 0) user = query["USER_NAME"].ToString();
-        var password = query["PASSWORD"].ToString();
+        var parameters = request.Query.ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
+        if (HttpMethods.IsPost(request.Method) && request.HasFormContentType)
+        {
+            foreach (var field in await request.ReadFormAsync())
+                parameters.TryAdd(field.Key, field.Value.ToString());
+        }
+        return parameters;
+    }
+
+    /// <summary>Creds arrive as push params on their model (USERNAME or USER_NAME — the
+    /// legacy gateway read the underscore spelling). Validate when present; reject
+    /// mismatches; absence is tolerated unless RequireCredentials.</summary>
+    public static IResult? CheckCredentials(IReadOnlyDictionary<string, string> parameters, SmsCentralOptions creds, IngressOptions options)
+    {
+        var user = parameters.GetValueOrDefault("USERNAME", "");
+        if (user.Length == 0) user = parameters.GetValueOrDefault("USER_NAME", "");
+        var password = parameters.GetValueOrDefault("PASSWORD", "");
 
         if (user.Length == 0 && password.Length == 0)
             return options.RequireCredentials ? Results.Unauthorized() : null;

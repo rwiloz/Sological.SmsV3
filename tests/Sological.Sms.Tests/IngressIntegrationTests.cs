@@ -221,7 +221,61 @@ public sealed class IngressIntegrationTests(IngressPostgresFixture fixture)
         payloads.Should().NotContain(p => p.GetValueOrDefault("REFERENCE") == marker);
     }
 
+    [Fact]
+    public async Task Dlr_PostFormEncoded_WorksLikeGet()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+        var id = await SendToSentAsync(factory, client, ch, "0412000006", "posted dlr");
+
+        var response = await client.PostAsync("/ingress/smscentral/delivery", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["USERNAME"] = "subuser",
+                ["PASSWORD"] = "subpass",
+                ["REFERENCE"] = id.ToString("N"),
+                ["ID"] = $"post-{id:N}",
+                ["RESULT"] = "1",
+                ["STATUS"] = "DELIVRD",
+            }));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Be("0");
+
+        (await GetStatusAsync(client, ch.ApiKey, id)).Status.Should().Be(MessageStatus.Delivered);
+    }
+
     // ── Inbound receiver ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Inbound_PostFormEncoded_WorksLikeGet()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+        var id = await SendToSentAsync(factory, client, ch, "0412000007", "posted reply expected");
+
+        var response = await client.PostAsync("/ingress/smscentral/inbound", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["ORIGINATOR"] = "61412000007",
+                ["RECIPIENT"] = "61499111333",
+                ["REFERENCE"] = id.ToString("N"),
+                ["MESSAGE_TEXT"] = "posted back",
+                ["ID"] = $"post-in-{id:N}",
+            }));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Be("0");
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+        var inbound = await db.InboundMessages.SingleAsync(m => m.UpstreamId == $"post-in-{id:N}");
+        inbound.ChannelId.Should().Be(ch.ChannelId);
+        inbound.ReplyToMessageId.Should().Be(id);
+        inbound.Body.Should().Be("posted back");
+    }
 
     [Fact]
     public async Task Inbound_Reply_CorrelatesByReference_AndDedupesById()

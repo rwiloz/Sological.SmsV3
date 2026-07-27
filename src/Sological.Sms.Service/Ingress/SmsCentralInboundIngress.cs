@@ -19,19 +19,18 @@ public sealed class SmsCentralInboundIngress(
 {
     public async Task<IResult> HandleAsync(HttpContext ctx, CancellationToken ct)
     {
-        var q = ctx.Request.Query;
-        var failure = IngressShared.CheckCredentials(q, smsCentral.Value, ingressOptions.Value);
+        var payload = await IngressShared.ReadParamsAsync(ctx.Request);
+        var failure = IngressShared.CheckCredentials(payload, smsCentral.Value, ingressOptions.Value);
         if (failure is not null) return failure;
 
-        var from = q["ORIGINATOR"].ToString();
-        var to = q["RECIPIENT"].ToString();
-        var reference = q["REFERENCE"].ToString();
-        var text = q["MESSAGE_TEXT"].ToString();
-        var udh = q["UDH"].ToString();
-        var binary = q["BINARY"].ToString();
-        var upstreamId = q["ID"].ToString();
-        int? dcs = int.TryParse(q["DCS"].ToString(), out var d) ? d : null;
-        var payload = q.ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
+        var from = payload.GetValueOrDefault("ORIGINATOR", "");
+        var to = payload.GetValueOrDefault("RECIPIENT", "");
+        var reference = payload.GetValueOrDefault("REFERENCE", "");
+        var text = payload.GetValueOrDefault("MESSAGE_TEXT", "");
+        var udh = payload.GetValueOrDefault("UDH", "");
+        var binary = payload.GetValueOrDefault("BINARY", "");
+        var upstreamId = payload.GetValueOrDefault("ID", "");
+        int? dcs = int.TryParse(payload.GetValueOrDefault("DCS", ""), out var d) ? d : null;
 
         if (from.Length == 0)
         {
