@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sological.Sms.Core/Sological.Sms.Core.csproj" />
+    <Project Path="src/Sological.Sms.Service/Sological.Sms.Service.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sological.Sms.Tests/Sological.Sms.Tests.csproj" />
+  </Folder>
+</Solution>

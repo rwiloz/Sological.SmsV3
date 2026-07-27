@@ -2,13 +2,32 @@
 
 **Created:** 2026-07-27
 **Modified:** 2026-07-27
-**Status:** S1–S4 designed ([design-sms-central.md](design-sms-central.md)); S5–S7 planned.
+**Status:** design signed off (Ray, 2026-07-27). **S1 DONE (2026-07-27)** — S2 is next; S5–S7 planned.
 
 Rules of the road: each slice lands complete and verified (suite green + the slice's named
 gate) before the next starts; open work carries an explicit OPEN marker here. Surfaces are
 listed per slice — scope-narrowing is Ray's call.
 
-## S1 — Skeleton + schema
+## S1 — Skeleton + schema ✅ DONE 2026-07-27
+
+Landed as designed; notes for whoever picks up S2:
+
+- Solution `Sological.Sms.sln`: `src/Sological.Sms.Core` (entities/enums, dependency-free),
+  `src/Sological.Sms.Service` (host + `Data/SmsDbContext` + migrations), `tests/`.
+- Migration `20260727004703_InitialSchema` creates all eight design-§3 tables (snake_case via
+  EFCore.NamingConventions, enums stored lowercase, payloads jsonb). Claim columns exist on
+  BOTH `messages` and `webhook_outbox` (design §3 named them for messages; §3/§9 name the
+  outbox worker claim-based, so the same pair ships there).
+- Gate evidence: integration tests (Testcontainers, postgres:17-alpine) prove clean apply on
+  an EMPTY database + idempotent re-apply + full-table round-trip incl. jsonb; live boot
+  against a throwaway empty PG migrated on start and served `/health` 200 twice (first +
+  second boot). Unit suite 6/6 with the CI filter; full suite 8/8. CI workflow
+  (`.github/workflows/ci.yml`) runs unit-only per the standing rule — first hosted run
+  happens whenever Ray first pushes.
+- A `unit test` reminder for later slices: `ModelTests.Model_HasNoPendingChanges…` fails the
+  suite if an entity change ships without its migration.
+
+Original slice text (for reference):
 
 .NET 10 solution: `Sological.Sms.Service` (ASP.NET minimal API host), `Sological.Sms.Core`
 (domain), `Sological.Sms.Tests`. EF Core + Npgsql; own database `sologicalsms` on the existing

@@ -11,7 +11,13 @@ First customer: AI-Workforce (its comms capability consumes the webhook egress).
 
 ## Status
 
-- **Phase: planning/design.** No code yet — docs first.
+- **Phase: build — S1 (skeleton + schema) landed 2026-07-27;** S2 (send lane) is next.
+  Design signed off; see the [implementation plan](docs/implementation-plan.md) for slice
+  progress and gates.
+- Build/test: `dotnet build` · `dotnet test` (integration tests need Docker; CI runs
+  unit-only per the standing rule) · service: `dotnet run --project src/Sological.Sms.Service`
+  (migrates its PostgreSQL database on start; local default
+  `Host=localhost;Database=sologicalsms`).
 - Docs:
   - [Engineering guide](docs/engineering-guide.md) — onboarding: reference-repo map, coding
     standards, secrets convention, working rules. **Start here.**

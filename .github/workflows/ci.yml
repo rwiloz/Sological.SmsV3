@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      # Unit tests only — Category=Integration runs locally, never on hosted CI
+      # (standing rule: nothing heavier than unit tests on hosted runners).
+      - name: Test (unit)
+        run: dotnet test --no-build -c Release --filter "Category!=Integration" --logger "trx;LogFileName=unit.trx" --results-directory TestResults
+
+      - name: Upload test results (TRX)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
