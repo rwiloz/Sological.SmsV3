@@ -53,9 +53,15 @@ recipient-normalize → duplicate → whitelist, `Retryable` on `UpstreamSubmitR
 (`SologicalSms--SmsCentral--User`).
 
 **OPEN — the gate needs Ray:**
-- ⚠ sub-account **password** → KV emulator (`SologicalSms--SmsCentral--Password`).
-- ⚠ **whitelist entries** + the AI-Workforce originator decision (design §10 Q2), then seed
-  via `ops/seed-channel.sql`.
+- ✅ sub-account password in the KV emulator (`SologicalSms--SmsCentral--Password`, Ray,
+  2026-07-27) — creds complete.
+- ✅ whitelist seeded: the 14 ACMA-registered "Ready to use" sender IDs
+  (`ops/seed-whitelist.sql`; ACMA matching is case-insensitive, v2 stores/enforces the
+  register's display casing). `AIWorkforce` (SOLOGICAL PTY LTD) is registered — the likely
+  §10 Q2 answer for SENDING; note an alpha sender ID cannot receive replies, so inbound for
+  AI-Workforce still needs the dedicated-number decision by S3/S4.
+- ⚠ **seed the AI-Workforce channel** (`ops/seed-channel.sql`: originator + generated API
+  key) — do together with the smoke.
 - ⚠ **live smoke** (one real SMS to Ray's number, message → `sent`, ledger row correct) —
   runs only on Ray's explicit go.
 
