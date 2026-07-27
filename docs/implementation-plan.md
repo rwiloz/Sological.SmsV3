@@ -108,8 +108,12 @@ then referenced message). Public HTTPS hostname for the receivers.
 > channel is the SUCCESSOR of legacy `AIDemo`/`AIDemoX` — same concept/use (AI-Workforce's
 > SMS lane), renamed `AIWorkforce` (Ray, 2026-07-27). The AIDemo kill-switch mismatch stays
 > in place (and keeps blocking dev sends at the old gateway) until the S4 repoint, when
-> channel `status=paused` becomes the first-class control. Ray may also want a separate
-> AI-Workforce DEV channel (legacy had `AIWorkforceDevX`) — decide at repoint time.
+> channel `status=paused` becomes the first-class control. More local dev channels are
+> expected (Ray, 2026-07-27 — candidates `ElecDemoAi`, `ElecDemoHuman`); decisions at mint
+> time: (a) AI-Workforce secret naming — prefer `Sms--Sological--{channel}--ApiKey` so
+> `ApiKey` doesn't become both leaf and section; (b) which sender ID each dev channel uses
+> (one channel per sender ID unless Ray relaxes it for dev); (c) dev channels seed as
+> `status=paused` by default — un-pause deliberately to demo.
 
 Webhook outbox worker: per-channel `webhook_url` + secret; `sms.inbound` + `sms.delivery`
 JSON POSTs, HMAC-signed, retry with backoff + dead-letter marking. Poll-parity endpoint for
