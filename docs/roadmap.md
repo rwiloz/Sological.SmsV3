@@ -43,10 +43,18 @@ region**, while Engage v1 has an AU instance. Sinch's reporting API is already R
 (RCS billing categories dated Feb-2026), so the platform carries RCS today; only the surface
 and residency questions remain.
 
+**New evidence (2026-07-27, S3 setup):** the SMS Central sub-account's webhook config
+offers a "receive RCS message" event, and current Sinch MessageMedia docs productize RCS
+send/receive/reply with SMS/MMS smart fallback on the MessageMedia platform surface
+(campaigns + third-party integration sending) — i.e. RCS may be reachable on THIS
+account's platform without the Conversation API and its residency problem. Still gated on
+an RCS agent registration either way; the webhook event never fires without one.
+
 Plan:
-1. **Ask Sinch two questions** when the account conversation happens: (a) is RCS send on the
-   AU instance Conversation-API-only? (b) can Conversation API share the Engage sender
-   numbers/agent?
+1. **Ask Sinch three questions** when the account conversation happens: (a) can RCS
+   send/receive be enabled on the SMS Central / MessageMedia account surface for AU (and
+   what's the agent registration path)? (b) is RCS send on the AU instance otherwise
+   Conversation-API-only? (c) can Conversation API share the Engage sender numbers/agent?
 2. **RCS agent onboarding has lead time** (brand verification with the carriers/Google) —
    start the registration when the first customer wants RCS, not when the build is ready.
 3. Build the Conversation API driver as a **third driver behind the same seam**, scoped to
