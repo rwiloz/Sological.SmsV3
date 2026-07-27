@@ -2,7 +2,7 @@
 
 **Created:** 2026-07-27
 **Modified:** 2026-07-27
-**Status:** PROPOSED — awaiting Ray's sign-off before S1 code.
+**Status:** SIGNED OFF (Ray, 2026-07-27) — S1 build started. §10 open questions remain parked with Ray.
 
 ## 1. Shape
 
