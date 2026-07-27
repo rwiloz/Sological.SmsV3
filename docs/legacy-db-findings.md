@@ -45,10 +45,10 @@ extracted — flags/aggregates only. Re-mine any time: restore the bak and re-ru
   send through those exact strings (the ExternalID is just the opaque channel key callers
   pass; several are email addresses).
 - ⚠ AI-Workforce note: the gateway channel is `AIDemoX`, but AI-Workforce is deliberately
-  configured with `AIDemo` — **a forced mismatch Ray uses as the SMS kill-switch** (unknown
-  channel ⇒ send fails ⇒ no real SMS from dev). Never "fix" the config value; when v2 takes
-  over, the kill-switch becomes first-class: the channel row's `status` (paused) replaces
-  string-mismatch as the way to make a channel safely un-sendable.
+  configured with `AIDemo` — **a forced mismatch Ray uses as a TEMPORARY SMS kill-switch**
+  (unknown channel ⇒ send fails ⇒ no real SMS from dev). Don't "fix" the config value in the
+  meantime; the mismatch retires at S4 when v2 gives the first-class control — the channel
+  row's `status` (paused) is how a channel becomes safely un-sendable from then on.
 
 ## Reference (ExtRef) behaviour — design corrections
 
