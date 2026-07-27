@@ -68,8 +68,11 @@ YARP, seed ratchet) — **does not apply here**. What DOES apply in this repo:
   Billing `Program.cs` or AI-Workforce commit `cbb2994d3`. Vault loads AFTER env vars (vault
   wins on overlap); **hermetic test harnesses must blank `AzureKeyVault__VaultUri`**.
   Ops scripts to crib: AI-Workforce `setup_keyvault_emulator.ps1` / `seed_keyvault_emulator.ps1`.
-- Secret names: `SmsV2:SmsCentral:Username|Password`, `SmsV2:Sinch:ApiKey` (S6),
-  `SmsV2:Webhook:{channelKey}`, DB connection. Azure = real Key Vault, same names.
+- Secret names — canonical namespace is **`SologicalSms:`** (Ray's naming 2026-07-27, set
+  when the first live secret landed; supersedes the `SmsV2:` spelling in early drafts):
+  `SologicalSms:SmsCentral:User|Password`, `SologicalSms:Sinch:ApiKey` (S6),
+  `SologicalSms:Webhook:{channelKey}`. Azure = real Key Vault, same names (vault secret
+  names spell `:` as `--`, e.g. `SologicalSms--SmsCentral--User`).
 - **DB connection key is namespaced**: `SologicalSms:ConnectionStrings:DefaultConnection`
   (local: the User-scoped `SologicalSms__ConnectionStrings__DefaultConnection` env var,
   set 2026-07-27 — canonical casing is `SologicalSms`; IConfiguration lookups are

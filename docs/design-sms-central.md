@@ -194,8 +194,9 @@ non-2xx/timeouts retry per outbox backoff then `dead` (visible in ops queries + 
 
 ## 8. Config & secrets
 
-- Secrets: `SmsV2:SmsCentral:Username|Password`, per-channel `SmsV2:Webhook:{channelKey}`,
-  DB connection. Azure: real Key Vault. **Local: the shared Azure Key Vault emulator**
+- Secrets: `SologicalSms:SmsCentral:User|Password`, per-channel
+  `SologicalSms:Webhook:{channelKey}`, DB connection (namespace renamed from `SmsV2:` to
+  `SologicalSms:` when the first live secret landed — Ray, 2026-07-27). Azure: real Key Vault. **Local: the shared Azure Key Vault emulator**
   (`https://localhost:4997`, container `aiworkforce-keyvault-emulator` — the established
   local secret home across Ray's services). Config pipeline loads KV whenever
   `AzureKeyVault:VaultUri` is set, emulator-aware (non-`vault.azure.net` host ⇒ emulator
