@@ -2,9 +2,11 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Serilog;
+using Sological.Sms.Core.Entities;
 using Sological.Sms.Core.Upstream;
 using Sological.Sms.Service.Api;
 using Sological.Sms.Service.Data;
+using Sological.Sms.Service.Ingress;
 using Sological.Sms.Service.Upstream;
 using Sological.Sms.Service.Workers;
 
@@ -16,10 +18,12 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    // preserveStaticLogger: parallel test hosts each keep their own logger — freezing the
+    // shared static one from concurrent boots is a race (static Log.* stays on bootstrap).
     builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Configuration(context.Configuration)
         .Enrich.FromLogContext()
-        .WriteTo.Console());
+        .WriteTo.Console(), preserveStaticLogger: true);
 
     // ── Azure Key Vault ────────────────────────────────────────────────────────
     // A vault URI outside *.vault.azure.net is the LOCAL Key Vault emulator (the machine-wide
@@ -83,12 +87,19 @@ try
     builder.Services.AddTransient<ISmsUpstream>(sp => sp.GetRequiredService<SmsCentralUpstream>());
     builder.Services.AddHostedService<DispatchWorker>();
 
+    // ── Upstream ingress (S3) ──────────────────────────────────────────────────
+    builder.Services.Configure<IngressOptions>(builder.Configuration.GetSection(IngressOptions.SectionName));
+    builder.Services.AddScoped<SmsCentralDeliveryIngress>();
+    builder.Services.AddScoped<SmsCentralInboundIngress>();
+    builder.Services.AddHostedService<InboundPartsSweeper>();
+
     var app = builder.Build();
 
     app.UseSerilogRequestLogging();
 
     app.MapHealthChecks("/health");
     app.MapMessagesApi();
+    app.MapSmsCentralIngress();
 
     // ── Migrate on startup (same pattern as the sibling services) ──────────────
     using (var scope = app.Services.CreateScope())
@@ -96,6 +107,25 @@ try
         var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
         Log.Information("Applying database migrations");
         await db.Database.MigrateAsync();
+
+        // System row: the operator quarantine channel (design §5.2) must always exist —
+        // unrouteable inbound is never dropped, never 500.
+        if (!await db.Channels.AnyAsync(c => c.Key == SystemChannels.OperatorKey))
+        {
+            var operatorCustomer =
+                await db.Customers.SingleOrDefaultAsync(c => c.Code == SystemChannels.OperatorCustomerCode)
+                ?? db.Customers.Add(new Customer { Code = SystemChannels.OperatorCustomerCode, Name = "Sological (operator)" }).Entity;
+            db.Channels.Add(new Channel
+            {
+                Customer = operatorCustomer,
+                Key = SystemChannels.OperatorKey,
+                Description = "Operator quarantine — unrouteable inbound lands here; never sends",
+                Originator = "SoLogical",
+                Status = ChannelStatus.Paused,
+            });
+            await db.SaveChangesAsync();
+            Log.Information("Operator quarantine channel created");
+        }
     }
 
     Log.Information("Sological SMS v2 service starting");

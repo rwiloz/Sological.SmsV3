@@ -106,6 +106,11 @@ Both are GET, both must answer `200` body `0` fast (their retry-on-silence is a 
 engine). Both validate `USERNAME`/`PASSWORD` against the sub-account creds (their model —
 creds in query string; receivers live on HTTPS only, and the values are the sub-account's,
 never a customer's). Idempotency before ack: dedupe on (`ID`, `REFERENCE`, part) natural keys.
+**S3 build reality check (2026-07-27):** the legacy gateway's live captures show their
+pushes carry NO creds at all (and the param is spelled `USER_NAME` in the legacy reader) —
+so v2 validates creds when present (both spellings), tolerates absence by default, and
+`SologicalSms:Ingress:RequireCredentials` turns on strict mode if the sub-account's pushes
+do carry them. State changes stay gated by REFERENCE = our unguessable uuid either way.
 
 ### 5.1 `GET /ingress/smscentral/delivery`
 
@@ -218,7 +223,8 @@ non-2xx/timeouts retry per outbox backoff then `dead` (visible in ops queries + 
 - Channel/customer rows are data (seeded by SQL/import script until S7 admin) — no
   channel config in appsettings, ever (the registry-row lesson from AI-Workforce comms).
 - Ingress hostname: needs a public HTTPS name before S3 (e.g. `smsv2.sological.com.au` on the
-  container app). ⚠ Decision for Ray.
+  container app). Dev (2026-07-27): `sms-yoga.sological.io` — Cloudflare tunnel → the local
+  docker container on 127.0.0.1:5230 (`ops/run-local-docker.ps1`). ⚠ Prod name still Ray's.
 
 ## 9. HA & DR posture (ruled 2026-07-27: platform HA replaces the sms/smsdr pair)
 

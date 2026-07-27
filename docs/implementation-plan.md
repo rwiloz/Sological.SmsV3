@@ -87,7 +87,40 @@ validation + **originator whitelist** — design §6.1a, terminal + unbilled; wh
   reaches `sent`, ledger row correct. ⚠ Prereq on Ray: SMS Central **sub-account created**
   (creds + originator/number decision for AI-Workforce).
 
-## S3 — Upstream ingress (DLR + inbound receivers)
+## S3 — Upstream ingress (DLR + inbound receivers) — ⏳ BUILT 2026-07-27, gate OPEN
+
+Built, tested (102/102; ingress integration suite replays the exact query shapes from the
+legacy live captures), and DEPLOYED to the local container behind the Cloudflare tunnel —
+receivers respond on `https://sms-yoga.sological.io/ingress/smscentral/{delivery,inbound}`
+(verified: bad creds → 401 through the tunnel). Implementation notes:
+
+- **Receiver auth**: the 2018 captures show SMS Central pushes carry NO credentials, so
+  creds are validated when present (both `USERNAME` and legacy `USER_NAME` spellings) and
+  absence is tolerated; `SologicalSms:Ingress:RequireCredentials` flips to strict if the
+  sub-account's pushes turn out to include them — check at the live gate.
+- Mapping refinements over the design table: `RESULT=503` → `expired` (their documented
+  meaning; the webhook contract already exposes it), `DELIVRD`/`DELIVERD` both accepted
+  (their docs use both spellings). BINARY decodes UTF-16BE for DCS 8, Latin-1 otherwise
+  (their spec — no GSM7 bit-packing).
+- Multipart DLR: per-part receipts tracked via UDH; delivered only when every part
+  confirms; any part failing ⇒ failed; first terminal verdict wins.
+- Inbound: REFERENCE (our uuid) → RECIPIENT (dedicated number) → operator quarantine
+  channel (system row, created at startup, paused, key `Operator`). Reassembly buffers in
+  `inbound_parts` under a pg advisory lock; the sweeper flushes stale groups partial
+  (`complete=false`) after 60s.
+
+**OPEN — the gate needs Ray:**
+- ⚠ set the sub-account **forward URLs**: delivery →
+  `https://sms-yoga.sological.io/ingress/smscentral/delivery`, inbound →
+  `https://sms-yoga.sological.io/ingress/smscentral/inbound` (this also answers whether
+  sub-accounts get independent callback config — the last §10 Q1 unknown).
+- ⚠ **live gate, Ray-approved only**: send → DLR arrives → `delivered`; reply from Ray's
+  phone → `inbound_messages` row correlated to the send; multipart (>160 chars) inbound
+  reassembles. NOTE: the reply leg needs a REPLYABLE originator — the `AIWorkforce` alpha
+  ID cannot receive SMS, so the reply/multipart legs need a dedicated-number channel
+  (§10 Q2 finally bites here).
+
+Original slice text:
 
 The two GET receivers SMS Central pushes to (design §5): delivery (`RESULT`/`STATUS` →
 normalized event → message state + `delivery_events` row) and inbound (multipart reassembly

@@ -50,7 +50,9 @@ internal sealed class FakeUpstream : ISmsUpstream
     }
 }
 
-internal sealed class SendLaneFactory(string connectionString, ISmsUpstream fake) : WebApplicationFactory<Program>
+internal sealed class SendLaneFactory(
+    string connectionString, ISmsUpstream fake, Dictionary<string, string?>? extraSettings = null)
+    : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -58,6 +60,10 @@ internal sealed class SendLaneFactory(string connectionString, ISmsUpstream fake
         builder.UseSetting("AzureKeyVault:VaultUri", ""); // hermetic harnesses blank the vault (guide rule)
         builder.UseSetting("SologicalSms:Dispatch:PollSeconds", "1");
         builder.UseSetting("SologicalSms:Dispatch:RetryDelays", "1,1,1");
+        builder.UseSetting("SologicalSms:SmsCentral:User", "subuser");
+        builder.UseSetting("SologicalSms:SmsCentral:Password", "subpass");
+        foreach (var (key, value) in extraSettings ?? [])
+            builder.UseSetting(key, value);
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<ISmsUpstream>();
