@@ -21,8 +21,9 @@ public sealed class SmsCentralDeliveryIngress(
     public async Task<IResult> HandleAsync(HttpContext ctx, CancellationToken ct)
     {
         var p = await IngressShared.ReadParamsAsync(ctx.Request);
-        var failure = IngressShared.CheckCredentials(p, smsCentral.Value, ingressOptions.Value);
+        var failure = IngressShared.CheckVerification(ctx.Request, p, smsCentral.Value, ingressOptions.Value);
         if (failure is not null) return failure;
+        IngressShared.RedactCredentials(p);
 
         var reference = p.GetValueOrDefault("REFERENCE", "");
         var upstreamId = p.GetValueOrDefault("ID", "");

@@ -62,6 +62,7 @@ internal sealed class SendLaneFactory(
         builder.UseSetting("SologicalSms:Dispatch:RetryDelays", "1,1,1");
         builder.UseSetting("SologicalSms:SmsCentral:User", "subuser");
         builder.UseSetting("SologicalSms:SmsCentral:Password", "subpass");
+        builder.UseSetting("SologicalSms:Ingress:VerifyKey", "test-verify-key");
         foreach (var (key, value) in extraSettings ?? [])
             builder.UseSetting(key, value);
         builder.ConfigureServices(services =>

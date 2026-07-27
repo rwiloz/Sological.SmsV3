@@ -94,10 +94,14 @@ legacy live captures), and DEPLOYED to the local container behind the Cloudflare
 receivers respond on `https://sms-yoga.sological.io/ingress/smscentral/{delivery,inbound}`
 (verified: bad creds → 401 through the tunnel). Implementation notes:
 
-- **Receiver auth**: the 2018 captures show SMS Central pushes carry NO credentials, so
-  creds are validated when present (both `USERNAME` and legacy `USER_NAME` spellings) and
-  absence is tolerated; `SologicalSms:Ingress:RequireCredentials` flips to strict if the
-  sub-account's pushes turn out to include them — check at the live gate.
+- **Receiver auth (Ray's ruling 2026-07-27: no creds in URLs)**: pushes verify via the
+  `SLVERIFY` header — a shared key (`SologicalSms--Ingress--VerifyKey` in the secret
+  store) configured on the portal's webhook headers, constant-time compared; wrong key →
+  401. Legacy `USERNAME`/`USER_NAME`+`PASSWORD` params still validate when present but any
+  creds params are REDACTED (`***`) before the payload persists. Nothing present is
+  tolerated until `SologicalSms:Ingress:RequireVerification=true` — flip it once the
+  portal is confirmed sending SLVERIFY on every push. Receivers take GET or POST
+  (form-encoded).
 - Mapping refinements over the design table: `RESULT=503` → `expired` (their documented
   meaning; the webhook contract already exposes it), `DELIVRD`/`DELIVERD` both accepted
   (their docs use both spellings). BINARY decodes UTF-16BE for DCS 8, Latin-1 otherwise

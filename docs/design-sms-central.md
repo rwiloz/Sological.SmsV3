@@ -107,10 +107,14 @@ engine). Both validate `USERNAME`/`PASSWORD` against the sub-account creds (thei
 creds in query string; receivers live on HTTPS only, and the values are the sub-account's,
 never a customer's). Idempotency before ack: dedupe on (`ID`, `REFERENCE`, part) natural keys.
 **S3 build reality check (2026-07-27):** the legacy gateway's live captures show their
-pushes carry NO creds at all (and the param is spelled `USER_NAME` in the legacy reader) —
-so v2 validates creds when present (both spellings), tolerates absence by default, and
-`SologicalSms:Ingress:RequireCredentials` turns on strict mode if the sub-account's pushes
-do carry them. State changes stay gated by REFERENCE = our unguessable uuid either way.
+pushes carry NO creds at all (and the param is spelled `USER_NAME` in the legacy reader).
+**Ruled (Ray, 2026-07-27): creds do NOT ride URLs** — verification is the `SLVERIFY`
+header carrying a shared key (portal-configured webhook header; constant-time compared;
+secret `SologicalSms--Ingress--VerifyKey`). Legacy creds params still validate when
+present but are redacted from stored payloads; absence is tolerated until
+`SologicalSms:Ingress:RequireVerification` flips strict. Receivers accept GET and POST
+(form-encoded — their current portal offers POST). State changes stay gated by
+REFERENCE = our unguessable uuid either way.
 
 ### 5.1 `GET /ingress/smscentral/delivery`
 

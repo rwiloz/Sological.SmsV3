@@ -246,6 +246,39 @@ public sealed class IngressIntegrationTests(IngressPostgresFixture fixture)
         (await GetStatusAsync(client, ch.ApiKey, id)).Status.Should().Be(MessageStatus.Delivered);
     }
 
+    [Fact]
+    public async Task SlVerifyHeader_RightKeyAccepted_WrongKey401_CredsParamsRedacted()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+        var id = await SendToSentAsync(factory, client, ch, "0412000008", "slverify");
+
+        // Wrong key → 401, nothing written.
+        var bad = new HttpRequestMessage(HttpMethod.Get,
+            $"/ingress/smscentral/delivery?{Query(("REFERENCE", id.ToString("N")), ("ID", "slv-bad"), ("RESULT", "1"))}");
+        bad.Headers.Add("SLVERIFY", "not-the-key");
+        (await client.SendAsync(bad)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // Right key + creds params → accepted, and the stored payload is redacted.
+        var good = new HttpRequestMessage(HttpMethod.Get,
+            $"/ingress/smscentral/delivery?{Query(("USERNAME", "subuser"), ("PASSWORD", "subpass"), ("REFERENCE", id.ToString("N")), ("ID", "slv-good"), ("RESULT", "1"))}");
+        good.Headers.Add("SLVERIFY", "test-verify-key");
+        var response = await client.SendAsync(good);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Be("0");
+
+        (await GetStatusAsync(client, ch.ApiKey, id)).Status.Should().Be(MessageStatus.Delivered);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+        var stored = (await db.DeliveryEvents.Where(e => e.MessageId == id).ToListAsync())
+            .Single(e => e.Payload.GetValueOrDefault("ID") == "slv-good");
+        stored.Payload["PASSWORD"].Should().Be("***", "payload jsonb is forever — creds never persist");
+        stored.Payload["USERNAME"].Should().Be("***");
+    }
+
     // ── Inbound receiver ─────────────────────────────────────────────────────
 
     [Fact]

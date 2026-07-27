@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+using System.Text;
 using Sological.Sms.Service.Upstream;
 
 namespace Sological.Sms.Service.Ingress;
@@ -7,10 +7,16 @@ public sealed class IngressOptions
 {
     public const string SectionName = "SologicalSms:Ingress";
 
-    /// <summary>The 2018 live captures show SMS Central pushes WITHOUT credentials, so by
-    /// default creds are validated only when present. Flip to true if the sub-account's
-    /// pushes turn out to carry them (verify at the S3 live gate).</summary>
-    public bool RequireCredentials { get; set; }
+    /// <summary>Shared secret for the SLVERIFY header (Ray's model, 2026-07-27): the
+    /// portal attaches it to every push; headers stay out of URLs, logs, and our stored
+    /// payloads. Secret name: SologicalSms--Ingress--VerifyKey.</summary>
+    public string? VerifyKey { get; set; }
+
+    /// <summary>The 2018 live captures show SMS Central pushes with NO verification at
+    /// all, so by default the SLVERIFY header / creds params are validated only when
+    /// present. Flip to true once the portal is confirmed sending SLVERIFY — then every
+    /// push must verify.</summary>
+    public bool RequireVerification { get; set; }
 
     /// <summary>Multipart inbound groups older than this are flushed partial (design §3).</summary>
     public int PartTimeoutSeconds { get; set; } = 60;
@@ -38,19 +44,45 @@ public static class IngressShared
         return parameters;
     }
 
-    /// <summary>Creds arrive as push params on their model (USERNAME or USER_NAME — the
-    /// legacy gateway read the underscore spelling). Validate when present; reject
-    /// mismatches; absence is tolerated unless RequireCredentials.</summary>
-    public static IResult? CheckCredentials(IReadOnlyDictionary<string, string> parameters, SmsCentralOptions creds, IngressOptions options)
+    public const string VerifyHeaderName = "SLVERIFY";
+
+    /// <summary>Verification, strongest lane first: the SLVERIFY header (mismatch → 401,
+    /// match → in), then legacy creds params (USERNAME or USER_NAME — the underscore
+    /// spelling is what the old gateway read). Nothing present is tolerated unless
+    /// RequireVerification. State changes stay gated by the unguessable REFERENCE uuid
+    /// regardless.</summary>
+    public static IResult? CheckVerification(
+        HttpRequest request, IReadOnlyDictionary<string, string> parameters,
+        SmsCentralOptions creds, IngressOptions options)
     {
+        var slVerify = request.Headers[VerifyHeaderName].ToString();
+        if (slVerify.Length > 0 && !string.IsNullOrEmpty(options.VerifyKey))
+        {
+            return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(slVerify), Encoding.UTF8.GetBytes(options.VerifyKey))
+                ? null
+                : Results.Unauthorized();
+        }
+        // Header present but no key configured: can't verify — falls through as absent.
+
         var user = parameters.GetValueOrDefault("USERNAME", "");
         if (user.Length == 0) user = parameters.GetValueOrDefault("USER_NAME", "");
         var password = parameters.GetValueOrDefault("PASSWORD", "");
+        if (user.Length > 0 || password.Length > 0)
+            return user == creds.User && password == creds.Password ? null : Results.Unauthorized();
 
-        if (user.Length == 0 && password.Length == 0)
-            return options.RequireCredentials ? Results.Unauthorized() : null;
+        return options.RequireVerification ? Results.Unauthorized() : null;
+    }
 
-        return user == creds.User && password == creds.Password ? null : Results.Unauthorized();
+    /// <summary>Stored payloads must never carry credentials — pushes CAN arrive with
+    /// creds params (their model), and payload jsonb is forever.</summary>
+    public static void RedactCredentials(Dictionary<string, string> parameters)
+    {
+        foreach (var key in new[] { "USERNAME", "USER_NAME", "PASSWORD" })
+        {
+            if (parameters.ContainsKey(key))
+                parameters[key] = "***";
+        }
     }
 
     /// <summary>E.164-ish comparison form: digits only, AU 04xx → 614xx.</summary>
