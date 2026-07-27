@@ -109,11 +109,13 @@ then referenced message). Public HTTPS hostname for the receivers.
 > SMS lane), renamed `AIWorkforce` (Ray, 2026-07-27). The AIDemo kill-switch mismatch stays
 > in place (and keeps blocking dev sends at the old gateway) until the S4 repoint, when
 > channel `status=paused` becomes the first-class control. More local dev channels are
-> expected (Ray, 2026-07-27 — candidates `ElecDemoAi`, `ElecDemoHuman`); decisions at mint
-> time: (a) AI-Workforce secret naming — prefer `Sms--Sological--{channel}--ApiKey` so
-> `ApiKey` doesn't become both leaf and section; (b) which sender ID each dev channel uses
-> (one channel per sender ID unless Ray relaxes it for dev); (c) dev channels seed as
-> `status=paused` by default — un-pause deliberately to demo.
+> expected (Ray, 2026-07-27 — candidates `ElecDemoAi`, `ElecDemoHuman`). RULED (Ray,
+> 2026-07-27): at this stage they ALL send as the `AIWorkforce` sender ID — sharing an
+> originator across channels is allowed (the one-channel-per-sender-ID rule means a channel
+> has exactly ONE sender, not the converse); in PROD, different tenants get different
+> registered sender IDs. Still to decide at mint time: (a) AI-Workforce secret naming —
+> prefer `Sms--Sological--{channel}--ApiKey` so `ApiKey` doesn't become both leaf and
+> section; (b) dev channels seed as `status=paused` by default — un-pause deliberately.
 
 Webhook outbox worker: per-channel `webhook_url` + secret; `sms.inbound` + `sms.delivery`
 JSON POSTs, HMAC-signed, retry with backoff + dead-letter marking. Poll-parity endpoint for
