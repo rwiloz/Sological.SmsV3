@@ -31,5 +31,8 @@ public class Channel
 
     public ChannelStatus Status { get; set; } = ChannelStatus.Active;
 
+    /// <summary>Duplicate-detection window for the §6.1a guard (default 1h, per-channel).</summary>
+    public int DuplicateWindowSeconds { get; set; } = 3600;
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -1,7 +1,12 @@
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Serilog;
+using Sological.Sms.Core.Upstream;
+using Sological.Sms.Service.Api;
 using Sological.Sms.Service.Data;
+using Sological.Sms.Service.Upstream;
+using Sological.Sms.Service.Workers;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -69,11 +74,21 @@ try
     builder.Services.AddHealthChecks()
         .AddDbContextCheck<SmsDbContext>("database");
 
+    // ── Send lane (S2) ─────────────────────────────────────────────────────────
+    builder.Services.ConfigureHttpJsonOptions(o =>
+        o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase)));
+    builder.Services.Configure<SmsCentralOptions>(builder.Configuration.GetSection(SmsCentralOptions.SectionName));
+    builder.Services.Configure<DispatchOptions>(builder.Configuration.GetSection(DispatchOptions.SectionName));
+    builder.Services.AddHttpClient<SmsCentralUpstream>();
+    builder.Services.AddTransient<ISmsUpstream>(sp => sp.GetRequiredService<SmsCentralUpstream>());
+    builder.Services.AddHostedService<DispatchWorker>();
+
     var app = builder.Build();
 
     app.UseSerilogRequestLogging();
 
     app.MapHealthChecks("/health");
+    app.MapMessagesApi();
 
     // ── Migrate on startup (same pattern as the sibling services) ──────────────
     using (var scope = app.Services.CreateScope())
@@ -95,6 +110,9 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+/// <summary>Exposes the entry point to WebApplicationFactory-based integration tests.</summary>
+public partial class Program;
 
 /// <summary>
 /// Static bearer credential for the local Key Vault emulator, which accepts any bearer token.

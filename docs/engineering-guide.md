@@ -25,6 +25,9 @@ The Sological SMS channels carry **real production SMS for real customers**. Any
 found in the reference repos or the gateway DB are live. Test sends go ONLY to Ray's own test
 number (ask, don't guess), only through the AI-Workforce sub-account channel once it exists.
 Never point this service's ingress/config at the production SMS Central account.
+**Never call the real SMS Central API — not even reads — from tests or ad-hoc runs without
+Ray's explicit approval (his standing rule, 2026-07-27).** Automated tests run on the fake
+upstream / stub HTTP handler only; live smokes are Ray-gated, per slice gate.
 
 ## Coding standards
 

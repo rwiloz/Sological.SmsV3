@@ -19,7 +19,7 @@ public class ModelTests
     }
 
     [Fact]
-    public void Model_MapsExactlyTheEightDesignTables_InSnakeCase()
+    public void Model_MapsExactlyTheDesignTables_InSnakeCase()
     {
         using var context = CreateContext();
         var tables = context.Model.GetEntityTypes()
@@ -36,6 +36,7 @@ public class ModelTests
             "inbound_parts",
             "billing_ledger",
             "webhook_outbox",
+            "allowed_originators", // S2: the ACMA sender-ID whitelist
         ]);
     }
 }

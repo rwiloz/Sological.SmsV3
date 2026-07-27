@@ -41,7 +41,25 @@ Schema (design §3): `customers`, `channels`, `messages`, `delivery_events`,
 - **Surfaces:** `GET /health`. No customer surface yet.
 - **Gate:** migrations apply clean on empty DB; CI (GitHub Actions) builds + tests green.
 
-## S2 — Send lane (SMS Central driver)
+## S2 — Send lane (SMS Central driver) — ⏳ BUILT 2026-07-27, gate OPEN
+
+Everything below is built and green (58/58; integration suite runs the whole lane on a fake
+upstream — the real SMS Central API is NEVER called by tests, Ray's standing rule). Landed
+with the build: migration `S2SendLane` (`allowed_originators` whitelist + per-channel
+`duplicate_window_seconds` default 3600 + retry columns), the ACMA originator-whitelist
+guard, the one-channel-per-sender-ID rule (`400 originator_mismatch`), guard order
+recipient-normalize → duplicate → whitelist, `Retryable` on `UpstreamSubmitResult`,
+`ops/seed-channel.sql` template. Sub-account username is in the local KV emulator
+(`SologicalSms--SmsCentral--User`).
+
+**OPEN — the gate needs Ray:**
+- ⚠ sub-account **password** → KV emulator (`SologicalSms--SmsCentral--Password`).
+- ⚠ **whitelist entries** + the AI-Workforce originator decision (design §10 Q2), then seed
+  via `ops/seed-channel.sql`.
+- ⚠ **live smoke** (one real SMS to Ray's number, message → `sent`, ledger row correct) —
+  runs only on Ray's explicit go.
+
+Original slice text:
 
 Customer send API (`POST /api/v1/messages`, per-channel API key auth) → message row →
 dispatch worker: **pre-dispatch guards first** (duplicate detection + local recipient

@@ -71,8 +71,11 @@ public interface ISmsUpstream
     Task<UpstreamSubmitResult> SubmitAsync(OutboundSms sms, CancellationToken ct);
 }
 public sealed record OutboundSms(Guid MessageId, string Originator, string To, string Body);
-public sealed record UpstreamSubmitResult(bool Accepted, string? UpstreamId, string? ErrorCode, string? ErrorDetail);
+public sealed record UpstreamSubmitResult(bool Accepted, string? UpstreamId, string? ErrorCode, string? ErrorDetail, bool Retryable = false);
 ```
+
+(`Retryable` was added at the S2 build: §4.1's bounded-retry codes must be distinguishable
+from hard rejects without the worker learning provider-specific codes.)
 
 Ingress is NOT on the interface — receivers are provider-specific endpoints that translate
 into two normalized internal events, and everything downstream of those is driver-agnostic:
@@ -140,6 +143,9 @@ honest transport. (Upstream blacklist additions arrive as 519 rejects and surfac
 
 `POST /api/v1/messages` — header `X-Api-Key` (the ONLY customer auth mechanism). Body:
 `{ to, body, reference?, originator? }` → `202 { messageId, parts, status: "queued" }`.
+**One channel per sender ID (Ray, 2026-07-27):** `originator` in the body is accepted only
+as a confirmation of the channel's configured sender — a different value is
+`400 originator_mismatch`. Multiple sender IDs = multiple channels (own API keys each).
 `GET /api/v1/messages/{id}` → full status. `reference` is the CALLER's correlation handle,
 echoed on every webhook; uniqueness per channel enforced (409 on reuse) **on this NEW surface
 only** — the S5 legacy emulation must keep accepting duplicate refs, because legacy callers

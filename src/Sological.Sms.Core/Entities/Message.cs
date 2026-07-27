@@ -47,4 +47,10 @@ public class Message
     public string? ClaimedBy { get; set; }
 
     public DateTimeOffset? ClaimedAt { get; set; }
+
+    /// <summary>Upstream submit attempts so far — §4.1's bounded retry (then failed).</summary>
+    public int Attempts { get; set; }
+
+    /// <summary>Earliest next submit (backoff); NULL = due now. §9: degrade to delayed, never lost.</summary>
+    public DateTimeOffset? NextAttemptAt { get; set; }
 }

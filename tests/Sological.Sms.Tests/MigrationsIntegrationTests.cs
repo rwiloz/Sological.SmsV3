@@ -108,6 +108,7 @@ public sealed class MigrationsIntegrationTests : IAsyncLifetime
                 EventType = WebhookEventType.SmsDelivery,
                 Payload = JsonDocument.Parse("""{"event":"sms.delivery","status":"delivered"}"""),
             });
+            db.AllowedOriginators.Add(new AllowedOriginator { Originator = "TestSender" });
             await db.SaveChangesAsync();
         }
 
@@ -137,6 +138,9 @@ public sealed class MigrationsIntegrationTests : IAsyncLifetime
             var outbox = await db.WebhookOutbox.SingleAsync();
             outbox.State.Should().Be(WebhookOutboxState.Pending);
             outbox.Payload.RootElement.GetProperty("event").GetString().Should().Be("sms.delivery");
+
+            (await db.AllowedOriginators.SingleAsync()).Originator.Should().Be("TestSender");
+            (await db.Channels.SingleAsync()).DuplicateWindowSeconds.Should().Be(3600, "the DB default applies");
         }
     }
 }

@@ -16,6 +16,7 @@ public class SmsDbContext(DbContextOptions<SmsDbContext> options) : DbContext(op
     public DbSet<InboundPart> InboundParts => Set<InboundPart>();
     public DbSet<BillingLedgerEntry> BillingLedger => Set<BillingLedgerEntry>();
     public DbSet<WebhookOutboxEntry> WebhookOutbox => Set<WebhookOutboxEntry>();
+    public DbSet<AllowedOriginator> AllowedOriginators => Set<AllowedOriginator>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -49,6 +50,8 @@ public class SmsDbContext(DbContextOptions<SmsDbContext> options) : DbContext(op
             e.Property(x => x.ApiKey2Hash).HasColumnName("api_key_2_hash").HasMaxLength(128);
             e.Property(x => x.WebhookUrl).HasMaxLength(500);
             e.Property(x => x.WebhookSecretName).HasMaxLength(100);
+            // Real DB default so raw-SQL channel seeding can omit it (design §6.1a: 1h default).
+            e.Property(x => x.DuplicateWindowSeconds).HasDefaultValue(3600);
             e.HasOne(x => x.Customer).WithMany(x => x.Channels)
                 .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -112,6 +115,13 @@ public class SmsDbContext(DbContextOptions<SmsDbContext> options) : DbContext(op
                 .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Channel>().WithMany()
                 .HasForeignKey(x => x.ChannelId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AllowedOriginator>(e =>
+        {
+            e.HasKey(x => x.Originator);
+            e.Property(x => x.Originator).HasMaxLength(20);
+            e.Property(x => x.Description).HasMaxLength(200);
         });
 
         modelBuilder.Entity<WebhookOutboxEntry>(e =>
