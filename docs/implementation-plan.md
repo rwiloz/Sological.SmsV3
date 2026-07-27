@@ -66,8 +66,10 @@ recipient-normalize → duplicate → whitelist, `Retryable` on `UpstreamSubmitR
   through the sub-account — 202 queued → worker → upstream accept → `sent` on the first
   attempt (`smoke-001`, msg `019fa182-a3b8-7c1a-a698-00f7aed09439`), ledger row 1 unit
   outbound/message, **handset receipt confirmed by Ray** (sender displayed as the
-  registered `AIWorkforce` ID). Status stays `sent` until S3 builds the DLR receiver —
-  `delivered` is S3's gate, not S2's.
+  registered `AIWorkforce` ID), **and the message is visible in the SMS Central
+  SUB-account portal** — confirming the isolation model: v2 traffic rides the sub-account,
+  the old gateway's account untouched. Status stays `sent` until S3 builds the DLR
+  receiver — `delivered` is S3's gate, not S2's.
 
 Original slice text:
 
