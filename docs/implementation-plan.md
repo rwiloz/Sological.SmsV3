@@ -25,9 +25,10 @@ Schema (design §3): `customers`, `channels`, `messages`, `delivery_events`,
 ## S2 — Send lane (SMS Central driver)
 
 Customer send API (`POST /api/v1/messages`, per-channel API key auth) → message row →
-dispatch worker → `ISmsUpstream` seam → **SmsCentralUpstream** (POST `wrapper/sms`,
-`REFERENCE` = our message id) → status transitions + billing ledger row (parts counted by
-GSM7/UCS-2 rules). Send status query API.
+dispatch worker: **pre-dispatch guards first** (duplicate detection + local recipient
+validation — design §6.1a, terminal + unbilled) → `ISmsUpstream` seam → **SmsCentralUpstream**
+(POST `wrapper/sms`, `REFERENCE` = our message id) → status transitions + billing ledger row
+(parts counted by GSM7/UCS-2 rules). Send status query API.
 
 - **Surfaces:** `POST /api/v1/messages` · `GET /api/v1/messages/{id}` · admin-less channel
   seeding via config/SQL for now (admin CRUD is S7).

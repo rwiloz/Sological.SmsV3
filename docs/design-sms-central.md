@@ -41,7 +41,8 @@ any customer surface.
   webhook_url, webhook_secret_name, upstream (`smscentral` now), status, created_at.
 - **messages** — id uuid (≡ upstream REFERENCE), channel_id, customer_ref (caller's own
   reference, optional, ≤64), to_number, originator_used, body, parts smallint,
-  status (`queued → submitting → sent → delivered | failed | rejected | expired`),
+  status (`queued → submitting → sent → delivered | failed | rejected | expired`, plus
+  terminal `duplicate` — §6.1a guard verdict, never dispatched, never billed),
   error_code, error_detail, upstream, upstream_id (SMS Central `ID`), requested_at,
   submitted_at, delivered_at, failed_at, claim columns for the dispatch worker
   (claimed_by, claimed_at; claims LEASE-expire so a dead replica's work is reclaimed — §9).
@@ -144,6 +145,21 @@ echoed on every webhook; uniqueness per channel enforced (409 on reuse) **on thi
 only** — the S5 legacy emulation must keep accepting duplicate refs, because legacy callers
 reuse them constantly (59k dups/12m on the biggest channel —
 [legacy-db-findings](legacy-db-findings.md)).
+
+### 6.1a Pre-dispatch guards (product features carried from the legacy processor)
+
+Run in the dispatch worker BEFORE any upstream submit; both verdicts are terminal, honest,
+and **excluded from the billing ledger**:
+
+- **Duplicate detection** (Ray: a product feature, not an accident): a queued message whose
+  (reference, recipient, body) matches an earlier message inside the window → status
+  `duplicate`. Legacy rule preserved exactly for the S5 surface (ExtRef + MobileNo + Message,
+  1-hour window, submission still ACCEPTED at the API); on the new API the window is
+  per-channel config (default 1h). Caught ~0.4% of live traffic in 12m — the double-submit
+  safety net. Source: `uDMExetelSMS.pas` "Mark Duplicates" sweep.
+- **Local recipient validation**: AU-mobile shape (`04` + 10 digits) or `+`-international,
+  `0400000000` sentinel rejected → status `rejected`, error `invalid_recipient` — saves the
+  upstream round-trip (legacy `I` before the upstream's 525 ever fires).
 
 ### 6.2 Webhooks (signed: `X-Sms-Signature: hmac-sha256=<hex>` over the raw body, per-channel secret)
 

@@ -44,8 +44,11 @@ extracted — flags/aggregates only. Re-mine any time: restore the bak and re-ru
 - The trailing-`X` ExternalID convention does NOT mean disabled — `AIDemoX`/`AIWorkforceDevX`
   send through those exact strings (the ExternalID is just the opaque channel key callers
   pass; several are email addresses).
-- ⚠ AI-Workforce note: its configured channel value is the exact string `AIDemoX` (DB fact;
-  update any doc/memory that says `AIDemo`).
+- ⚠ AI-Workforce note: the gateway channel is `AIDemoX`, but AI-Workforce is deliberately
+  configured with `AIDemo` — **a forced mismatch Ray uses as the SMS kill-switch** (unknown
+  channel ⇒ send fails ⇒ no real SMS from dev). Never "fix" the config value; when v2 takes
+  over, the kill-switch becomes first-class: the channel row's `status` (paused) replaces
+  string-mismatch as the way to make a channel safely un-sendable.
 
 ## Reference (ExtRef) behaviour — design corrections
 
@@ -57,21 +60,38 @@ extracted — flags/aggregates only. Re-mine any time: restore the bak and re-ru
   uuid, not the caller's ref — same trick the Delphi gateway used (it passed its SMSID).
 - New-style customers (`Cus*`) already use short numeric refs with near-zero duplication.
 
-## Status letters (legacy alphabet, confirmed meanings)
+## Status letters (legacy alphabet, confirmed against vw_Report + processor code)
 
 `N` new/queued · `S` sent (carrier-accepted, receipt pending) · `D` delivered · `F` failed ·
-`I` invalid = upstream submit-reject (e.g. `525 Recipient address not valid`) ·
-`E` error (no notes recorded) · rare NULL. 12m distribution: D 295,637 · F 12,844 · S 10,170 ·
-E 1,338 · I 439.
+`I` **invalid recipient** — flagged by the processor's LOCAL pre-send validation (`04`+10-digit
+AU mobile or `+`-international; `0400000000` sentinel rejected) and by upstream 525 rejects ·
+`E` **DUPLICATE** (not "error") · `X` historical pending-reset lane (vw_Report counts it as
+Pending) · rare NULL. 12m distribution: D 295,637 · F 12,844 · S 10,170 · E(dup) 1,338 · I 439.
+
+### Duplicate detection — a PRODUCT FEATURE, carried into v2 (Ray, 2026-07-27)
+
+The processor (uDMExetelSMS.pas `Mark Duplicates`, before every send sweep): a queued (`N`)
+message is flagged `E` and **never dispatched** when an earlier message with the **same
+ExtRef + MobileNo + Message body** exists with the newer request inside **1 hour** of the
+earlier one. Submissions are ACCEPTED (the caller still gets `OK {SMSID}`), flagged, visible
+in reports — and **not billed** (vw_Report excludes `I`/`E` from PartsSent). ~1,338 catches
+in 12m (~0.4% of traffic) — it's the double-submit safety net.
 
 ## Implications folded back into the build
 
 1. Billing ledger counts **parts** (S2) — at ~2.7 parts/send this is the dominant billing
    dimension; reconcile monthly against the SMS Central invoice (S7 gate).
-2. Inbound volume is trivial today (≈3/day) and concentrated on one dedicated number —
-   the AI-Workforce dedicated-number recommendation (design §10 Q2) matches how CN Reply
+2. Inbound volume is trivial today (≈3/day). **Ray: there are THREE reply numbers in
+   service** (the 24m data shows traffic on `0418726844` and `0417678492`; per-number
+   routing/ownership details to be worked through with Ray during the build) — the
+   AI-Workforce dedicated-number recommendation (design §10 Q2) matches how CN Reply
    already works; the webhook egress needs no volume engineering.
 3. Import script (S5): bring `SMSChannel` rows for the ACTIVE set only (table above);
    62 legacy channels are dead — archive, don't migrate.
 4. Delivery evidence maps from status letters + `SMSDeliveryStatus`, never `DeliveredDT`.
 5. Ref-uniqueness enforcement is new-API-only (above).
+6. **Duplicate detection ships as a v2 pipeline guard** (design §6.1a): terminal `duplicate`
+   status, never dispatched, never billed — legacy rule (ref+recipient+body, 1h) preserved
+   exactly on the S5 surface; per-channel window on the new API.
+7. **Local recipient validation ships pre-dispatch** (AU-mobile/international shape) —
+   terminal `rejected` with `invalid_recipient`, saves the upstream round-trip.
