@@ -41,7 +41,7 @@ Schema (design §3): `customers`, `channels`, `messages`, `delivery_events`,
 - **Surfaces:** `GET /health`. No customer surface yet.
 - **Gate:** migrations apply clean on empty DB; CI (GitHub Actions) builds + tests green.
 
-## S2 — Send lane (SMS Central driver) — ⏳ BUILT 2026-07-27, gate OPEN
+## S2 — Send lane (SMS Central driver) — ✅ DONE 2026-07-27 (gate passed)
 
 Everything below is built and green (58/58; integration suite runs the whole lane on a fake
 upstream — the real SMS Central API is NEVER called by tests, Ray's standing rule). Landed
@@ -60,10 +60,14 @@ recipient-normalize → duplicate → whitelist, `Retryable` on `UpstreamSubmitR
   register's display casing). `AIWorkforce` (SOLOGICAL PTY LTD) is registered — the likely
   §10 Q2 answer for SENDING; note an alpha sender ID cannot receive replies, so inbound for
   AI-Workforce still needs the dedicated-number decision by S3/S4.
-- ⚠ **seed the AI-Workforce channel** (`ops/seed-channel.sql`: originator + generated API
-  key) — do together with the smoke.
-- ⚠ **live smoke** (one real SMS to Ray's number, message → `sent`, ledger row correct) —
-  runs only on Ray's explicit go.
+- ✅ AI-Workforce channel seeded (customer `aiworkforce`, channel `AIWorkforce`, originator
+  `AIWorkforce`, hashed API key; plaintext handed to Ray in-session).
+- ✅ **GATE PASSED 2026-07-27** (Ray approved: "smoke it"): live SMS to Ray's test number
+  through the sub-account — 202 queued → worker → upstream accept → `sent` on the first
+  attempt (`smoke-001`, msg `019fa182-a3b8-7c1a-a698-00f7aed09439`), ledger row 1 unit
+  outbound/message, **handset receipt confirmed by Ray** (sender displayed as the
+  registered `AIWorkforce` ID). Status stays `sent` until S3 builds the DLR receiver —
+  `delivered` is S3's gate, not S2's.
 
 Original slice text:
 
