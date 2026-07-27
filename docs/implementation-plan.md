@@ -114,15 +114,20 @@ receivers respond on `https://sms-yoga.sological.io/ingress/smscentral/{delivery
   (`complete=false`) after 60s.
 
 **OPEN — the gate needs Ray:**
-- ⚠ set the sub-account **forward URLs**: delivery →
-  `https://sms-yoga.sological.io/ingress/smscentral/delivery`, inbound →
-  `https://sms-yoga.sological.io/ingress/smscentral/inbound` (this also answers whether
-  sub-accounts get independent callback config — the last §10 Q1 unknown).
-- ⚠ **live gate, Ray-approved only**: send → DLR arrives → `delivered`; reply from Ray's
-  phone → `inbound_messages` row correlated to the send; multipart (>160 chars) inbound
-  reassembles. NOTE: the reply leg needs a REPLYABLE originator — the `AIWorkforce` alpha
-  ID cannot receive SMS, so the reply/multipart legs need a dedicated-number channel
-  (§10 Q2 finally bites here).
+- ⚠ set the sub-account **forward URLs** (both POST per the portal, form-encoded assumed —
+  if the portal turns out to send JSON bodies, the receivers need a JSON parser first):
+  delivery → `https://sms-yoga.sological.io/ingress/smscentral/delivery`, inbound →
+  `https://sms-yoga.sological.io/ingress/smscentral/inbound`, both with the `SLVERIFY`
+  header (key: `SologicalSms--Ingress--VerifyKey`). Sub-accounts DO have their own webhook
+  config (§10 Q1 answered — Ray found the screens; independence confirmed at first push).
+- ✅ replyable lane ready: sub-account dedicated number **+61 438 887 301** (Ray,
+  2026-07-27) → channel `AIWorkforceReply` (originator `0438887301`, whitelisted, own API
+  key held by Ray). The gate's reply/multipart legs send FROM this channel so Ray's phone
+  can reply; `AIWorkforce` (alpha ID) stays the outbound-only lane.
+- ⚠ **live gate, Ray-approved only**: send from `AIWorkforceReply` → DLR arrives →
+  `delivered`; reply from Ray's phone → `inbound_messages` row correlated via REFERENCE;
+  a >160-char reply reassembles from parts. Confirm SLVERIFY arrives on real pushes, then
+  flip `SologicalSms:Ingress:RequireVerification=true`.
 
 Original slice text:
 
