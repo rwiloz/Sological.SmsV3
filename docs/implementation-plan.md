@@ -105,8 +105,9 @@ then referenced message). Public HTTPS hostname for the receivers.
 > Staged already (2026-07-27): the v2 `AIWorkforce` channel's API key is in AI-Workforce's
 > local KV emulator secret `Sms:Sological:ApiKey` — the repoint will use it as `X-Api-Key`.
 > The v2 API has NO Channel parameter (the key IS the channel identity), and this v2
-> channel is NOT the legacy `AIDemo`/`AIDemoX` — the AIDemo kill-switch mismatch stays in
-> place (and keeps blocking dev sends at the old gateway) until the S4 repoint, when
+> channel is the SUCCESSOR of legacy `AIDemo`/`AIDemoX` — same concept/use (AI-Workforce's
+> SMS lane), renamed `AIWorkforce` (Ray, 2026-07-27). The AIDemo kill-switch mismatch stays
+> in place (and keeps blocking dev sends at the old gateway) until the S4 repoint, when
 > channel `status=paused` becomes the first-class control. Ray may also want a separate
 > AI-Workforce DEV channel (legacy had `AIWorkforceDevX`) — decide at repoint time.
 
@@ -133,7 +134,8 @@ authenticates by IP alone today (the Delphi code only checks ApiKey when one is 
 issued API keys before its repoint. That key-issuance sweep is a migration prerequisite on the
 customer checklist, not code — **the sweep list is known: channels 2, 7, 8, 46, 47, 52 (+ Test)**,
 per [legacy-db-findings](legacy-db-findings.md). Import script: ACTIVE `SMSChannel` rows only
-(the findings table; 62 dead channels archive, don't migrate). Legacy emulation ACCEPTS
+(the findings table; 62 dead channels archive, don't migrate; `AIDemoX`/`AIWorkforceDevX`
+do NOT import either — superseded by the v2-native `AIWorkforce` channel, Ray 2026-07-27). Legacy emulation ACCEPTS
 duplicate refs (legacy callers reuse them heavily) — ref-uniqueness is new-API-only.
 
 - **Surfaces:** the three legacy routes on the legacy hostnames (`sms.sological.com.au`,
