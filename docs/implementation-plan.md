@@ -102,6 +102,14 @@ then referenced message). Public HTTPS hostname for the receivers.
 
 ## S4 — Customer webhook egress + AI-Workforce wiring
 
+> Staged already (2026-07-27): the v2 `AIWorkforce` channel's API key is in AI-Workforce's
+> local KV emulator secret `Sms:Sological:ApiKey` — the repoint will use it as `X-Api-Key`.
+> The v2 API has NO Channel parameter (the key IS the channel identity), and this v2
+> channel is NOT the legacy `AIDemo`/`AIDemoX` — the AIDemo kill-switch mismatch stays in
+> place (and keeps blocking dev sends at the old gateway) until the S4 repoint, when
+> channel `status=paused` becomes the first-class control. Ray may also want a separate
+> AI-Workforce DEV channel (legacy had `AIWorkforceDevX`) — decide at repoint time.
+
 Webhook outbox worker: per-channel `webhook_url` + secret; `sms.inbound` + `sms.delivery`
 JSON POSTs, HMAC-signed, retry with backoff + dead-letter marking. Poll-parity endpoint for
 debugging. Then the AI-Workforce side (in the AI-Workforce repo, its own commit set): point
