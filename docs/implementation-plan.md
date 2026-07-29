@@ -128,6 +128,20 @@ receivers respond on `https://sms-yoga.sological.io/ingress/smscentral/{delivery
   `delivered`; reply from Ray's phone → `inbound_messages` row correlated via REFERENCE;
   a >160-char reply reassembles from parts. Confirm SLVERIFY arrives on real pushes, then
   flip `SologicalSms:Ingress:RequireVerification=true`.
+- **Gate status 2026-07-29 — partially proven, BLOCKED on account manager.** Proven live:
+  send → sent, DR webhooks arrive within seconds, SLVERIFY header arrives AND matches.
+  Blocked: webhook pushes have EMPTY bodies (portal webhooks carry no payload template),
+  so no status/reference/reply content lands. Fix requires either a template field in the
+  portal webhook UI (unconfirmed), the legacy Rules&Triggers-style forwarding (REFERENCE
+  round-trip format — what production's gateway still receives), or REST API keys to
+  manage webhook templates via the Management API. Credential taxonomy settled
+  (docs.app.api.sinch.com + hub API-settings layout): `sological2`+password = LEGACY-class
+  creds (wrapper); REST wants a separate revocable Basic/HMAC key pair — self-service in
+  the Hub for the test account, not exposed (yet) on the sub-account portal. Ray is
+  waiting on his account manager for: sub-account REST keys, webhook-template capability,
+  test-account credit/sender-ID, and the RCS-on-AU questions (roadmap Phase 3). Also
+  noted: the Hub's "billing units in Delivery Reports and Callbacks" toggle feeds S7
+  reconciliation — enable on production when available.
 
 Original slice text:
 
