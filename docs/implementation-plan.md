@@ -261,6 +261,14 @@ present (window heuristic stays as fallback).
 
 ## S5 — Legacy emulation (before customer migration; not gating S6 design)
 
+> ⚠ **S5 approach needs Ray's review before build (2026-07-31):** at least one live legacy
+> caller supports only SSL 1.0-era protocols — no modern edge (Cloudflare, Container Apps
+> ingress) will terminate that, so the plain repoint of `sms.sological.com.au` breaks that
+> client. Likely shape: the old box (or a small shim on it) stays as a PROTOCOL-DOWNGRADE
+> PROXY, accepting the ancient TLS and forwarding to v2's legacy-emulation routes; DNS
+> repoint then only affects modern callers. Inventory which channels' callers have this
+> constraint during the S5 planning pass.
+
 Byte-compatible `isapi/submitsms.dll/sendsms`, `checkstatus`, `getsms` routes mapped onto the
 v2 store (status letters N/S/D/F/E/I; `getsms` consume-once semantics preserved; tab-separated
 response shapes exact). Channel = legacy `ExternalID`; ApiKey1/2 honored. **No IP allowlisting
