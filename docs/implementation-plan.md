@@ -87,7 +87,23 @@ validation + **originator whitelist** — design §6.1a, terminal + unbilled; wh
   reaches `sent`, ledger row correct. ⚠ Prereq on Ray: SMS Central **sub-account created**
   (creds + originator/number decision for AI-Workforce).
 
-## S3 — Upstream ingress (DLR + inbound receivers) — ⏳ BUILT 2026-07-27, gate OPEN
+## S3 — Upstream ingress (DLR + inbound receivers) — ✅ DONE 2026-07-30 (gate passed)
+
+**GATE PASSED 2026-07-30**, all legs live on the sub-account webhooks (Ray's portal
+template-picker config + our receivers):
+- send `s3-gate-004` → DR chain fired (enroute→submitted→delivered) → message
+  **`delivered` automatically** (first receipt content-matched, mtId `d9867fc8…`
+  backfilled to `upstream_id`, delivered receipt matched by mtId).
+- Ray's reply → inbound row on the right channel with **exact `reply_to_message_id`
+  correlation via mtId** — works even for alpha-originator channels.
+- >160-char reply (476 chars, prior cycle) arrived **platform-preassembled, complete** —
+  the multipart leg; our UDH parts buffer stays as the legacy-path fallback.
+- SLVERIFY arrived+matched on every live push → **`RequireVerification=true` deployed**
+  (verified 401 without the header through the tunnel).
+- Correlation ruling (proven): `$metadata` does NOT round-trip the wrapper REFERENCE
+  (unresolved Velocity literal came back). Chain instead: REFERENCE uuid (legacy format)
+  → `upstream_id`==mtId → unique content-match (mtContent+handset, 72h) → audit-only.
+  S6's REST sends will know mtId at submit time and skip the content-match rung entirely.
 
 Built, tested (102/102; ingress integration suite replays the exact query shapes from the
 legacy live captures), and DEPLOYED to the local container behind the Cloudflare tunnel —
