@@ -259,6 +259,31 @@ present (window heuristic stays as fallback).
   the case; customer reply → case-targeted inbox signal via exact `replyTo` correlation.
   **This closes the capability gap that started the project.**
 
+## Azure DEV deployment — ⚠ ACTIVE, requested by Ray 2026-07-31
+
+The AI-Workforce Azure dev instance needs v2 reachable in Azure (local docker + tunnels
+serves only the local dev loop). Target per feasibility/§9: Container App beside the
+Billing service, own database `sologicalsms` on the existing Azure PSQL server, real Key
+Vault carrying the same secret names (`SologicalSms--*`), migrations-on-start already
+built for it. Inputs needed from Ray before executing: subscription/resource group +
+container-apps environment (beside Billing?), the Azure PSQL server name (+ HA tier
+decision — dev can ride single-zone + PITR per §9), Key Vault name, ingress hostname for
+the dev instance (the §10 Q3 decision, dev flavor), how images ship (registry/CI), and
+which channels the Azure instance serves (its own AIW dev channels — the ElecDemo* idea —
+vs sharing the local ones; webhook URLs differ per instance). SMS Central webhook forward
+URLs stay pointed at sms-yoga (local) until Ray decides which instance owns upstream
+ingress in dev.
+
+## S7 note (pulled-forward proposal, 2026-07-31 — awaiting Ray's ruling)
+
+Ray proposed: v2 grows a MANAGEMENT API and the admin UI lives in AI-Workforce's admin
+dashboard. Recommended shape: v2 stays the authority (standalone management API, operator-
+class credential `SologicalSms:Admin:ApiKey` — never per-channel keys); AIW's System
+service proxies server-side so the key never reaches a browser and the platform login is
+inherited. Suggested pull-forward: a minimal ops slice (dead-letter view/requeue, channel
+CRUD + key rotation, whitelist CRUD) ahead of full S7 reporting — current admin story is
+hand SQL. Customer self-service, if ever, is a separate channel-scoped surface.
+
 ## S5 — Legacy emulation (before customer migration; not gating S6 design)
 
 > ⚠ **S5 approach needs Ray's review before build (2026-07-31):** at least one live legacy
