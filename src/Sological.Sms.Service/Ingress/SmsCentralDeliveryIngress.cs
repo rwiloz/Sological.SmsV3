@@ -27,11 +27,11 @@ public sealed class SmsCentralDeliveryIngress(
         p["_slverify"] = ctx.Request.Headers[IngressShared.VerifyHeaderName].Count > 0 ? "present" : "absent";
 
         var reference = p.GetValueOrDefault("REFERENCE", "");
-        var upstreamId = p.GetValueOrDefault("ID", "");
+        var upstreamId = IngressShared.FirstOf(p, "ID", "dtId", "drId", "reportId");
         var udh = p.GetValueOrDefault("UDH", "");
         var rawResult = p.GetValueOrDefault("RESULT", "");
         var rawStatus = p.GetValueOrDefault("STATUS", "");
-        var rawDescription = p.GetValueOrDefault("STATUSDESCRIPTION", "");
+        var rawDescription = IngressShared.FirstOf(p, "STATUSDESCRIPTION", "statusCode");
 
         // Idempotency BEFORE ack (design §5): their retry-on-silence is a duplication
         // engine; natural key is (ID, REFERENCE, part).
@@ -41,8 +41,8 @@ public sealed class SmsCentralDeliveryIngress(
                 SELECT EXISTS(
                     SELECT 1 FROM delivery_events
                     WHERE provider = 'smscentral'
-                      AND payload->>'ID' = {upstreamId}
-                      AND COALESCE(payload->>'REFERENCE', '') = {reference}
+                      AND COALESCE(payload->>'ID', payload->>'dtId', payload->>'drId', payload->>'reportId') = {upstreamId}
+                      AND COALESCE(payload->>'REFERENCE', payload->>'reference', '') = {reference}
                       AND COALESCE(payload->>'UDH', '') = {udh}) AS "Value"
                 """).SingleAsync(ct);
             if (duplicate)

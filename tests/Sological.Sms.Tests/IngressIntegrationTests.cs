@@ -301,7 +301,62 @@ public sealed class IngressIntegrationTests(IngressPostgresFixture fixture)
         (await GetStatusAsync(client, ch.ApiKey, id)).Status.Should().Be(MessageStatus.Delivered);
     }
 
+    [Fact]
+    public async Task Dlr_PortalPickerShape_RaysFieldNames_Delivers()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+        var id = await SendToSentAsync(factory, client, ch, "0412000010", "portal picker dlr");
+
+        // Ray's configured delivery mapping (2026-07-30): dtId/mtId/status/statusCode/
+        // sourceAddress/timestamps/reference/mtContent.
+        var json = "{\"dtId\":\"pp-dr-1\",\"mtId\":\"877c19ef\",\"status\":\"delivered\",\"statusCode\":\"221\"," +
+                   "\"sourceAddress\":\"+61438887301\",\"submittedTimestamp\":\"2026-07-30T08:43:00.850Z\"," +
+                   "\"receivedTimestamp\":\"2026-07-30T08:44:00.850Z\",\"reference\":\"" + id.ToString("N") + "\"," +
+                   "\"mtContent\":\"portal picker dlr\"}";
+        var response = await client.PostAsync("/ingress/smscentral/delivery",
+            new StringContent(json, Encoding.UTF8, "application/json"));
+        (await response.Content.ReadAsStringAsync()).Should().Be("0");
+
+        (await GetStatusAsync(client, ch.ApiKey, id)).Status.Should().Be(MessageStatus.Delivered);
+
+        // Same push again (their retries) — dtId is the dedupe key.
+        await client.PostAsync("/ingress/smscentral/delivery",
+            new StringContent(json, Encoding.UTF8, "application/json"));
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+        (await db.DeliveryEvents.CountAsync(e => e.MessageId == id)).Should().Be(1);
+    }
+
     // ── Inbound receiver ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Inbound_PortalPickerShape_RaysFieldNames_RoutesAndStoresReply()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory, numericOriginator: "0499000444");
+
+        // Ray's configured inbound mapping (2026-07-30): moId/mtId/sourceAddress/
+        // destinationAddress/mtContent/moContent/submittedTimestamp.
+        var json = "{\"moId\":\"pp-mo-1\",\"mtId\":\"877c19ef\",\"sourceAddress\":\"+61408004199\"," +
+                   "\"destinationAddress\":\"+61499000444\",\"mtContent\":\"original text\"," +
+                   "\"moContent\":\"the actual reply\",\"submittedTimestamp\":\"2026-07-30T08:45:00.850Z\"}";
+        var response = await client.PostAsync("/ingress/smscentral/inbound",
+            new StringContent(json, Encoding.UTF8, "application/json"));
+        (await response.Content.ReadAsStringAsync()).Should().Be("0");
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+        var inbound = await db.InboundMessages.SingleAsync(m => m.UpstreamId == "pp-mo-1");
+        inbound.ChannelId.Should().Be(ch.ChannelId, "destinationAddress routes to the dedicated-number channel");
+        inbound.FromNumber.Should().Be("+61408004199");
+        inbound.Body.Should().Be("the actual reply", "moContent, never mtContent");
+        inbound.Complete.Should().BeTrue();
+    }
 
     [Fact]
     public async Task Inbound_PostFormEncoded_WorksLikeGet()

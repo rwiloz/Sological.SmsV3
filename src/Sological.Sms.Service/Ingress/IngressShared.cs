@@ -151,4 +151,17 @@ public static class IngressShared
 
     public static string? Truncate(string value, int max)
         => value.Length == 0 ? null : value.Length <= max ? value : value[..max];
+
+    /// <summary>First non-empty value among alias keys — the portal's template picker
+    /// names fields differently from the legacy pushes (dtId vs ID, sourceAddress vs
+    /// ORIGINATOR, …); both dialects are first-class.</summary>
+    public static string FirstOf(IReadOnlyDictionary<string, string> parameters, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = parameters.GetValueOrDefault(key, "");
+            if (value.Length > 0) return value;
+        }
+        return "";
+    }
 }

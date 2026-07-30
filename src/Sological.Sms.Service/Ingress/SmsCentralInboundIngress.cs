@@ -25,13 +25,13 @@ public sealed class SmsCentralInboundIngress(
         IngressShared.RedactCredentials(payload);
         payload["_slverify"] = ctx.Request.Headers[IngressShared.VerifyHeaderName].Count > 0 ? "present" : "absent";
 
-        var from = payload.GetValueOrDefault("ORIGINATOR", "");
-        var to = payload.GetValueOrDefault("RECIPIENT", "");
+        var from = IngressShared.FirstOf(payload, "ORIGINATOR", "sourceAddress");
+        var to = IngressShared.FirstOf(payload, "RECIPIENT", "destinationAddress");
         var reference = payload.GetValueOrDefault("REFERENCE", "");
-        var text = payload.GetValueOrDefault("MESSAGE_TEXT", "");
+        var text = IngressShared.FirstOf(payload, "MESSAGE_TEXT", "moContent", "replyContent");
         var udh = payload.GetValueOrDefault("UDH", "");
         var binary = payload.GetValueOrDefault("BINARY", "");
-        var upstreamId = payload.GetValueOrDefault("ID", "");
+        var upstreamId = IngressShared.FirstOf(payload, "ID", "moId", "replyId");
         int? dcs = int.TryParse(payload.GetValueOrDefault("DCS", ""), out var d) ? d : null;
 
         if (from.Length == 0)
