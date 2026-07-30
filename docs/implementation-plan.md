@@ -142,6 +142,15 @@ receivers respond on `https://sms-yoga.sological.io/ingress/smscentral/{delivery
   test-account credit/sender-ID, and the RCS-on-AU questions (roadmap Phase 3). Also
   noted: the Hub's "billing units in Delivery Reports and Callbacks" toggle feeds S7
   reconciliation — enable on production when available.
+- **2026-07-30 — REST auth + webhook definitions PROVEN on the new Sinch (test) account.**
+  Ray minted a Basic key pair ([AIDev] → `SologicalSms--SinchTest--ApiKey|ApiSecret`);
+  read-only probes 200 on `au.app.api.sinch.com`. Both webhook definitions (JSON-encoded
+  Velocity templates + SLVERIFY header; DR id `1a1464d6…`, MO id `12bb6439…`) were created
+  via the Management API and read back verbatim — the empty-body problem is solved in
+  principle; the definitions just need to exist on the PRODUCTION sub-account. Remaining
+  account-manager ask narrows to: REST key pair for `sological2` (then I apply the same
+  two definitions there myself), test-account credit + sender ID for S6 rehearsal, RCS
+  questions. Test account cannot have sub-accounts yet; sends need manual credit.
 
 Original slice text:
 
