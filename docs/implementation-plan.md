@@ -216,6 +216,14 @@ live key (a dev send gets an honest 403 channel_paused).
 - ⚠ **Gate (Ray-approved)**: case SMS send → delivery signal lands on the case; customer
   reply → case-targeted inbox signal via exact `replyTo` correlation. **Closes the
   capability gap that started the project.**
+- **Gate-run status 2026-07-30:** receive pipe FULLY verified (signed probe →
+  system-yoga tunnel → AIW gateway → HMAC ✓ → 200). Key rotated to the reply channel via
+  the AIW Keys & Secrets UI (write-through verified in the vault; binds on next System
+  restart). No send has entered the pipeline yet: the 403 in the AIW logs was the
+  TEMPLATE SAVE endpoint, and the SMS send-test isn't enabled in the current AIW build —
+  both AI-Workforce-UI matters, being taken up in that repo's own session. v2 side needs
+  nothing and is watching. Recipient-gate note: dev REDIRECTS all SMS to Ray's number, so
+  no whitelist rule is needed (redirect still sends; only block stops).
 
 > Staged already (2026-07-27): the v2 `AIWorkforce` channel's API key is in AI-Workforce's
 > local KV emulator secret `Sms:Sological:ApiKey` — the repoint will use it as `X-Api-Key`.
