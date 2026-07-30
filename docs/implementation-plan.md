@@ -216,6 +216,12 @@ live key (a dev send gets an honest 403 channel_paused).
 - ⚠ **Gate (Ray-approved)**: case SMS send → delivery signal lands on the case; customer
   reply → case-targeted inbox signal via exact `replyTo` correlation. **Closes the
   capability gap that started the project.**
+- **2026-07-31: TRANSPORT LOOP CLOSED LIVE.** AIW test-send → v2 → SMS from 0438887301 →
+  Ray's phone; DR chain → `delivered` (mtId); reply → exact `reply_to`; all three signed
+  webhooks delivered (after fixing the container's missing webhook-secret env — `941be92`);
+  AIW's contact row settled `status=delivered` with `provider_ref` = the v2 message id
+  (verified in comms.contacts), reply correctly non-case (source=test). **Remaining for
+  the formal gate: one MEDULLA/case send → reply → case-targeted inbox signal.**
 - **Gate-run status 2026-07-30:** receive pipe FULLY verified (signed probe →
   system-yoga tunnel → AIW gateway → HMAC ✓ → 200). Key rotated to the reply channel via
   the AIW Keys & Secrets UI (write-through verified in the vault; binds on next System
