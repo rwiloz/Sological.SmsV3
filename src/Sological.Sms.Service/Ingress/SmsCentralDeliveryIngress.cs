@@ -146,6 +146,7 @@ public sealed class SmsCentralDeliveryIngress(
 
                 message.Status = MessageStatus.Delivered;
                 message.DeliveredAt = DateTimeOffset.UtcNow;
+                await EnqueueDeliveryEventAsync(message, ct);
                 logger.LogInformation("Message {MessageId} delivered", message.Id);
                 return;
 
@@ -168,10 +169,17 @@ public sealed class SmsCentralDeliveryIngress(
                 message.ErrorCode = IngressShared.Truncate(rawResult, 32) ?? IngressShared.Truncate(rawStatus, 32);
                 message.ErrorDetail = rawDescription.Length > 0 ? rawDescription : rawStatus;
                 message.FailedAt = DateTimeOffset.UtcNow;
+                await EnqueueDeliveryEventAsync(message, ct);
                 logger.LogWarning("Message {MessageId} {Status}: {Code} {Detail}",
                     message.Id, message.Status, message.ErrorCode, message.ErrorDetail);
                 return;
         }
+    }
+
+    private async Task EnqueueDeliveryEventAsync(Message message, CancellationToken ct)
+    {
+        var channel = await db.Channels.FindAsync(new object?[] { message.ChannelId }, ct);
+        Egress.WebhookOutbox.EnqueueDelivery(db, channel!, message, logger);
     }
 
     /// <summary>First-receipt fallback for wrapper-era sends: the DR echoes the original

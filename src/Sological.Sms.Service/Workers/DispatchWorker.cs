@@ -143,6 +143,7 @@ public sealed class DispatchWorker(
             message.ErrorDetail = recipient.Error;
             message.FailedAt = DateTimeOffset.UtcNow;
             ReleaseClaim(message);
+            Egress.WebhookOutbox.EnqueueDelivery(db, channel, message, logger);
             await db.SaveChangesAsync(ct);
             logger.LogInformation("Message {MessageId} rejected: invalid recipient ***{Last4}",
                 message.Id, Last4(message.ToNumber));
@@ -182,6 +183,7 @@ public sealed class DispatchWorker(
             message.ErrorDetail = $"originator '{message.OriginatorUsed}' is not on the sender-ID whitelist";
             message.FailedAt = DateTimeOffset.UtcNow;
             ReleaseClaim(message);
+            Egress.WebhookOutbox.EnqueueDelivery(db, channel, message, logger);
             await db.SaveChangesAsync(ct);
             logger.LogWarning("Message {MessageId} rejected: originator {Originator} not whitelisted",
                 message.Id, message.OriginatorUsed);
@@ -224,7 +226,8 @@ public sealed class DispatchWorker(
                 Direction = SmsDirection.Outbound,
                 Units = message.Parts,
             });
-            await db.SaveChangesAsync(ct); // sent + ledger row commit together
+            Egress.WebhookOutbox.EnqueueDelivery(db, channel, message, logger);
+            await db.SaveChangesAsync(ct); // sent + ledger + customer event commit together
             logger.LogInformation("Message {MessageId} sent to ***{Last4} ({Parts} part(s))",
                 message.Id, Last4(message.ToNumber), message.Parts);
             return;
@@ -237,6 +240,7 @@ public sealed class DispatchWorker(
             message.ErrorDetail = result.ErrorDetail;
             message.FailedAt = DateTimeOffset.UtcNow;
             ReleaseClaim(message);
+            Egress.WebhookOutbox.EnqueueDelivery(db, channel, message, logger);
             await db.SaveChangesAsync(ct);
             logger.LogWarning("Message {MessageId} rejected by upstream: {Code} {Detail}",
                 message.Id, result.ErrorCode, result.ErrorDetail);
@@ -252,6 +256,7 @@ public sealed class DispatchWorker(
             message.ErrorDetail = $"retries exhausted after {message.Attempts} attempts: {result.ErrorDetail}";
             message.FailedAt = DateTimeOffset.UtcNow;
             ReleaseClaim(message);
+            Egress.WebhookOutbox.EnqueueDelivery(db, channel, message, logger);
             await db.SaveChangesAsync(ct);
             logger.LogError("Message {MessageId} failed after {Attempts} attempts: {Code} {Detail}",
                 message.Id, message.Attempts, result.ErrorCode, result.ErrorDetail);

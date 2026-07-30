@@ -181,7 +181,31 @@ then referenced message). Public HTTPS hostname for the receivers.
   `inbound_messages` row correlated to the sent message. Multipart inbound (>160 chars)
   reassembles. ⚠ Prereq on Ray: sub-account forward URLs set to the receivers.
 
-## S4 — Customer webhook egress + AI-Workforce wiring
+## S4 — Customer webhook egress + AI-Workforce wiring — ⏳ v2 SIDE BUILT 2026-07-30
+
+v2's half is built, tested (125/125) and deployed: outbox rows are written in the SAME
+transaction as every state change (dispatch: sent/rejected/failed; DLR ingress:
+delivered/failed/expired/rejected; inbound ingress + sweeper: sms.inbound with `replyTo`
+when correlated — explicit `null` otherwise, per contract); the egress worker claims
+(FOR UPDATE SKIP LOCKED, lease-expiring), signs the exact bytes sent
+(`X-Sms-Signature: hmac-sha256=<hex>`, per-channel secret resolved by NAME from config/KV),
+POSTs, retries 1m→5m→30m→2h on the DB clock, then `dead` LOUDLY; sms.inbound success
+stamps `delivered_to_customer_at`. `GET /api/v1/inbound?since=` poll-parity endpoint live.
+`duplicate` is deliberately not a webhook status (§6.2 vocabulary); it stays visible on
+the status API. No schema change needed — S1's outbox table carried everything.
+
+**OPEN — the gate is the AI-Workforce half (its repo, with Ray):**
+- ⚠ seed the `AIWorkforce` channel's webhook config: `webhook_url` → the AI-Workforce
+  `SmsWebhookController` endpoint; `webhook_secret_name` → `SologicalSms:Webhook:AIWorkforce`
+  (secret into the KV emulator; AI-Workforce holds the same value to verify signatures).
+- ⚠ AI-Workforce repoint (design §7): `SologicalSmsProvider` → `POST /api/v1/messages`
+  (X-Api-Key already staged in its KV), delete the `smsdr` misread + `UseFallBackEndPoint`;
+  `SmsWebhookController` aligns to §6.2 payloads (Q4: verify HMAC — recommended — or keep
+  `X-Sms-Api-Key`); `InboundSmhandler` uses `replyTo` exact correlation, window heuristic
+  stays as fallback.
+- ⚠ **Gate (Ray-approved)**: case SMS send → delivery signal lands on the case; customer
+  reply → case-targeted inbox signal via exact `replyTo` correlation. **Closes the
+  capability gap that started the project.**
 
 > Staged already (2026-07-27): the v2 `AIWorkforce` channel's API key is in AI-Workforce's
 > local KV emulator secret `Sms:Sological:ApiKey` — the repoint will use it as `X-Api-Key`.

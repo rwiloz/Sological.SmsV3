@@ -93,12 +93,18 @@ try
     builder.Services.AddScoped<SmsCentralInboundIngress>();
     builder.Services.AddHostedService<InboundPartsSweeper>();
 
+    // ── Customer webhook egress (S4) ───────────────────────────────────────────
+    builder.Services.Configure<EgressOptions>(builder.Configuration.GetSection(EgressOptions.SectionName));
+    builder.Services.AddHttpClient(EgressOptions.HttpClientName);
+    builder.Services.AddHostedService<WebhookEgressWorker>();
+
     var app = builder.Build();
 
     app.UseSerilogRequestLogging();
 
     app.MapHealthChecks("/health");
     app.MapMessagesApi();
+    app.MapInboundApi();
     app.MapSmsCentralIngress();
 
     // ── Migrate on startup (same pattern as the sibling services) ──────────────

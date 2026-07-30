@@ -51,7 +51,9 @@ internal sealed class FakeUpstream : ISmsUpstream
 }
 
 internal sealed class SendLaneFactory(
-    string connectionString, ISmsUpstream fake, Dictionary<string, string?>? extraSettings = null)
+    string connectionString, ISmsUpstream fake,
+    Dictionary<string, string?>? extraSettings = null,
+    HttpMessageHandler? egressHandler = null)
     : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -60,15 +62,22 @@ internal sealed class SendLaneFactory(
         builder.UseSetting("AzureKeyVault:VaultUri", ""); // hermetic harnesses blank the vault (guide rule)
         builder.UseSetting("SologicalSms:Dispatch:PollSeconds", "1");
         builder.UseSetting("SologicalSms:Dispatch:RetryDelays", "1,1,1");
+        builder.UseSetting("SologicalSms:Egress:PollSeconds", "1");
         builder.UseSetting("SologicalSms:SmsCentral:User", "subuser");
         builder.UseSetting("SologicalSms:SmsCentral:Password", "subpass");
         builder.UseSetting("SologicalSms:Ingress:VerifyKey", "test-verify-key");
+        builder.UseSetting("SologicalSms:Webhook:Test", "whsec-test");
         foreach (var (key, value) in extraSettings ?? [])
             builder.UseSetting(key, value);
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<ISmsUpstream>();
             services.AddSingleton(fake);
+            if (egressHandler is not null)
+            {
+                services.AddHttpClient(Sological.Sms.Service.Workers.EgressOptions.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => egressHandler);
+            }
         });
     }
 }

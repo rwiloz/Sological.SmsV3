@@ -79,7 +79,7 @@ public sealed class InboundPartsSweeper(
                     "Flushing PARTIAL inbound group {Group} on channel {ChannelId}: {Got}/{Total} parts after {Timeout}s — delivering what arrived",
                     group.GroupRef, group.ChannelId, parts.Count, total, timeout);
 
-            db.InboundMessages.Add(new InboundMessage
+            var inbound = new InboundMessage
             {
                 Id = Guid.CreateVersion7(),
                 ChannelId = group.ChannelId,
@@ -93,7 +93,10 @@ public sealed class InboundPartsSweeper(
                     ["received_parts"] = parts.Count.ToString(),
                     ["total_parts"] = total.ToString(),
                 },
-            });
+            };
+            db.InboundMessages.Add(inbound);
+            var channel = await db.Channels.FindAsync(new object?[] { group.ChannelId }, ct);
+            Egress.WebhookOutbox.EnqueueInbound(db, channel!, inbound, logger);
             db.InboundParts.RemoveRange(parts);
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);

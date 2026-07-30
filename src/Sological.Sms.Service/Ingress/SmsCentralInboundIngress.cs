@@ -80,7 +80,7 @@ public sealed class SmsCentralInboundIngress(
         // Body: MESSAGE_TEXT when present; else UDH+BINARY (multipart / non-GSM).
         if (text.Length > 0)
         {
-            await StoreInboundAsync(channelId, from, to, text, upstreamId, replyTo?.Id, complete: true, payload, ct);
+            await StoreInboundAsync(channelId, from, to, text, upstreamId, replyTo, complete: true, payload, ct);
             return IngressShared.Ack();
         }
 
@@ -95,11 +95,11 @@ public sealed class SmsCentralInboundIngress(
         if (concat is null)
         {
             // No usable concat header — treat the decoded fragment as the whole message.
-            await StoreInboundAsync(channelId, from, to, fragment, upstreamId, replyTo?.Id, complete: true, payload, ct);
+            await StoreInboundAsync(channelId, from, to, fragment, upstreamId, replyTo, complete: true, payload, ct);
             return IngressShared.Ack();
         }
 
-        await StorePartAsync(channelId, from, to, fragment, concat, dcs, upstreamId, replyTo?.Id, payload, ct);
+        await StorePartAsync(channelId, from, to, fragment, concat, dcs, upstreamId, replyTo, payload, ct);
         return IngressShared.Ack();
     }
 
@@ -127,9 +127,9 @@ public sealed class SmsCentralInboundIngress(
 
     private async Task StoreInboundAsync(
         long channelId, string from, string to, string body, string upstreamId,
-        Guid? replyToMessageId, bool complete, Dictionary<string, string> payload, CancellationToken ct)
+        Message? replyTo, bool complete, Dictionary<string, string> payload, CancellationToken ct)
     {
-        db.InboundMessages.Add(new InboundMessage
+        var inbound = new InboundMessage
         {
             Id = Guid.CreateVersion7(),
             ChannelId = channelId,
@@ -137,13 +137,20 @@ public sealed class SmsCentralInboundIngress(
             ToNumber = IngressShared.Truncate(to, 20),
             Body = body,
             UpstreamId = IngressShared.Truncate(upstreamId, 64),
-            ReplyToMessageId = replyToMessageId,
+            ReplyToMessageId = replyTo?.Id,
+            ReplyToMessage = replyTo,
             Complete = complete,
             Payload = payload,
-        });
+        };
+        db.InboundMessages.Add(inbound);
+
+        // Outbox pattern (S4): the customer event commits with the inbound row or not at all.
+        var channel = await db.Channels.FindAsync(new object?[] { channelId }, ct);
+        Egress.WebhookOutbox.EnqueueInbound(db, channel!, inbound, logger);
+
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Inbound stored for channel {ChannelId} from ***{Last4} (complete={Complete}, replyTo={ReplyTo})",
-            channelId, Last4(from), complete, replyToMessageId);
+            channelId, Last4(from), complete, replyTo?.Id);
     }
 
     /// <summary>Buffers one part; assembles the group when the last part lands. The
@@ -151,7 +158,7 @@ public sealed class SmsCentralInboundIngress(
     /// row locks can't (the racing rows don't exist yet).</summary>
     private async Task StorePartAsync(
         long channelId, string from, string to, string fragment, UdhParser.ConcatInfo concat,
-        int? dcs, string upstreamId, Guid? replyToMessageId, Dictionary<string, string> payload, CancellationToken ct)
+        int? dcs, string upstreamId, Message? replyTo, Dictionary<string, string> payload, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlAsync(
@@ -189,7 +196,7 @@ public sealed class SmsCentralInboundIngress(
         if (parts.Count >= concat.TotalParts)
         {
             var body = string.Concat(parts.Select(p => p.BodyFragment));
-            await StoreInboundAsync(channelId, from, to, body, upstreamId, replyToMessageId, complete: true, payload, ct);
+            await StoreInboundAsync(channelId, from, to, body, upstreamId, replyTo, complete: true, payload, ct);
             db.InboundParts.RemoveRange(parts);
             await db.SaveChangesAsync(ct);
         }
