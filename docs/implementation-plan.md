@@ -194,15 +194,25 @@ stamps `delivered_to_customer_at`. `GET /api/v1/inbound?since=` poll-parity endp
 `duplicate` is deliberately not a webhook status (§6.2 vocabulary); it stays visible on
 the status API. No schema change needed — S1's outbox table carried everything.
 
-**OPEN — the gate is the AI-Workforce half (its repo, with Ray):**
-- ⚠ seed the `AIWorkforce` channel's webhook config: `webhook_url` → the AI-Workforce
-  `SmsWebhookController` endpoint; `webhook_secret_name` → `SologicalSms:Webhook:AIWorkforce`
-  (secret into the KV emulator; AI-Workforce holds the same value to verify signatures).
-- ⚠ AI-Workforce repoint (design §7): `SologicalSmsProvider` → `POST /api/v1/messages`
-  (X-Api-Key already staged in its KV), delete the `smsdr` misread + `UseFallBackEndPoint`;
-  `SmsWebhookController` aligns to §6.2 payloads (Q4: verify HMAC — recommended — or keep
-  `X-Sms-Api-Key`); `InboundSmhandler` uses `replyTo` exact correlation, window heuristic
-  stays as fallback.
+**AI-Workforce half BUILT 2026-07-30** (AI-Workforce repo `df90cde34` + `774a3b6fb`,
+suites green): provider repointed to `POST /api/v1/messages` (202 messageId = real
+provider_ref; smsdr/UseFallBackEndPoint/SmsFallbackEnabled deleted), unified
+`POST /api/sms/webhook` with **HMAC verification over the raw body (Q4 RULED: HMAC,
+2026-07-30; X-Sms-Api-Key retired)**, `expired` → Undeliverable, and exact reply
+correlation via `provider_ref` (window heuristic kept as fallback). Config seeded in the
+shared KV emulator: `Sms:Sological:BaseUrl` (http://localhost:5230),
+`Sms:Sological:WebhookSecret` == `SologicalSms:Webhook:AIWorkforce` (one shared HMAC
+secret). Both `AIWorkforce` and `AIWorkforceReply` channels subscribed to
+`https://system-yoga.sological.io/api/sms/webhook`. **The `AIWorkforce` channel is PAUSED**
+— the first-class kill-switch replacing the AIDemo mismatch, now that AI-Workforce holds a
+live key (a dev send gets an honest 403 channel_paused).
+
+**OPEN — the gate run (needs Ray):**
+- ⚠ stand up the `system-yoga.sological.io` tunnel → the AI-Workforce gateway.
+- ⚠ decide the gate send lane: unpause `AIWorkforce` (alpha sender, delivery leg only —
+  not replyable) and/or swap AI-Workforce's `Sms:Sological:ApiKey` to the
+  `AIWorkforceReply` channel key so case sends ride the dedicated number and the reply leg
+  works end-to-end (recommended for the gate; §10 Q2's dedicated-number answer in action).
 - ⚠ **Gate (Ray-approved)**: case SMS send → delivery signal lands on the case; customer
   reply → case-targeted inbox signal via exact `replyTo` correlation. **Closes the
   capability gap that started the project.**
