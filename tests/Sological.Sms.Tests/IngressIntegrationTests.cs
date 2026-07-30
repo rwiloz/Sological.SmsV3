@@ -330,6 +330,54 @@ public sealed class IngressIntegrationTests(IngressPostgresFixture fixture)
         (await db.DeliveryEvents.CountAsync(e => e.MessageId == id)).Should().Be(1);
     }
 
+    [Fact]
+    public async Task MtIdChain_ContentMatch_Backfill_Delivery_AndExactReplyCorrelation()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory); // alpha originator — replies can ONLY correlate via mtId
+        var id = await SendToSentAsync(factory, client, ch, "0412000011", "mtid chain body");
+        const string mtId = "0b0db661-bdae-4b4c-b187-c34e5bd398c7";
+        // The live pushes carry the UNRESOLVED Velocity literal when metadata has no such key.
+        const string badRef = "$metadata.get('REFERENCE')";
+
+        // DR 1 (enroute): no usable reference, unknown mtId — content match backfills upstream_id.
+        var dr1 = "{\"dtId\":\"mt-dr-1\",\"mtId\":\"" + mtId + "\",\"status\":\"enroute\",\"statusCode\":\"101\"," +
+                  "\"sourceAddress\":\"+61412000011\",\"reference\":\"" + badRef + "\",\"mtContent\":\"mtid chain body\"}";
+        (await (await client.PostAsync("/ingress/smscentral/delivery",
+            new StringContent(dr1, Encoding.UTF8, "application/json"))).Content.ReadAsStringAsync()).Should().Be("0");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+            (await db.Messages.SingleAsync(m => m.Id == id)).UpstreamId.Should().Be(mtId, "the first receipt backfills mtId");
+        }
+        (await GetStatusAsync(client, ch.ApiKey, id)).Status.Should().Be(MessageStatus.Sent, "enroute is interim");
+
+        // DR 2 (delivered): mtId only — no content, no reference. Must match via upstream_id.
+        var dr2 = "{\"dtId\":\"mt-dr-2\",\"mtId\":\"" + mtId + "\",\"status\":\"delivered\",\"statusCode\":\"220\"," +
+                  "\"sourceAddress\":\"+61412000011\",\"reference\":\"" + badRef + "\"}";
+        await client.PostAsync("/ingress/smscentral/delivery", new StringContent(dr2, Encoding.UTF8, "application/json"));
+        (await GetStatusAsync(client, ch.ApiKey, id)).Status.Should().Be(MessageStatus.Delivered);
+
+        // Reply: carries the same mtId — exact reply_to correlation even though the
+        // channel's originator is an alpha ID (no recipient routing possible).
+        var mo = "{\"moId\":\"mt-mo-1\",\"mtId\":\"" + mtId + "\",\"sourceAddress\":\"+61412000011\"," +
+                 "\"destinationAddress\":\"+61499999999\",\"moContent\":\"exact reply\",\"reference\":\"" + badRef + "\"}";
+        (await (await client.PostAsync("/ingress/smscentral/inbound",
+            new StringContent(mo, Encoding.UTF8, "application/json"))).Content.ReadAsStringAsync()).Should().Be("0");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+            var inbound = await db.InboundMessages.SingleAsync(m => m.UpstreamId == "mt-mo-1");
+            inbound.ReplyToMessageId.Should().Be(id, "mtId gives exact reply correlation");
+            inbound.ChannelId.Should().Be(ch.ChannelId, "channel comes from the correlated message");
+            inbound.Body.Should().Be("exact reply");
+        }
+    }
+
     // ── Inbound receiver ─────────────────────────────────────────────────────
 
     [Fact]

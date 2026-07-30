@@ -46,10 +46,16 @@ public sealed class SmsCentralInboundIngress(
 
         // Routing (design §5.2): REFERENCE wins — our uuid round-trips on replies and is
         // authoritative; captures show REFERENCE can also carry foreign junk, so parse
-        // defensively and fall through.
+        // defensively and fall through. Modern webhook pushes instead carry mtId — the
+        // platform's id of the message being REPLIED TO — which matches upstream_id once
+        // a delivery receipt has backfilled it: exact reply correlation, proven live.
+        var mtId = IngressShared.FirstOf(payload, "mtId", "messageId", "MESSAGE_ID");
         Message? replyTo = null;
         if (Guid.TryParseExact(reference, "N", out var messageId))
             replyTo = await db.Messages.SingleOrDefaultAsync(m => m.Id == messageId, ct);
+        if (replyTo is null && mtId.Length > 0)
+            replyTo = await db.Messages.Where(m => m.UpstreamId == mtId)
+                .OrderByDescending(m => m.RequestedAt).FirstOrDefaultAsync(ct);
 
         long channelId;
         if (replyTo is not null)

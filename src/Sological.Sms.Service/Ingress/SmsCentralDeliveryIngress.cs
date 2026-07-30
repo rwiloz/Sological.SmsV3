@@ -49,9 +49,22 @@ public sealed class SmsCentralDeliveryIngress(
                 return IngressShared.Ack();
         }
 
+        // Correlation chain (proven live 2026-07-30): REFERENCE uuid when present (the
+        // legacy forward format) → the platform's message id (mtId, once learned) →
+        // content match for a first receipt (the DR echoes mtContent + the handset;
+        // wrapper sends never learn mtId up front, and $metadata does NOT round-trip our
+        // REFERENCE — tested, the Velocity get() came back unresolved). On any match the
+        // mtId is backfilled to upstream_id, which also unlocks exact reply correlation.
+        var mtId = IngressShared.FirstOf(p, "mtId", "messageId", "MESSAGE_ID");
         Message? message = null;
         if (Guid.TryParseExact(reference, "N", out var messageId))
             message = await db.Messages.SingleOrDefaultAsync(m => m.Id == messageId, ct);
+        if (message is null && mtId.Length > 0)
+            message = await db.Messages.Where(m => m.UpstreamId == mtId)
+                .OrderByDescending(m => m.RequestedAt).FirstOrDefaultAsync(ct);
+        message ??= await MatchByContentAsync(p, ct);
+        if (message is not null && string.IsNullOrEmpty(message.UpstreamId) && mtId.Length > 0)
+            message.UpstreamId = IngressShared.Truncate(mtId, 64);
 
         var verdict = MapVerdict(rawResult, rawStatus);
 
@@ -160,6 +173,33 @@ public sealed class SmsCentralDeliveryIngress(
                 return;
         }
     }
+
+    /// <summary>First-receipt fallback for wrapper-era sends: the DR echoes the original
+    /// text (mtContent) and the handset (sourceAddress). Match only when exactly ONE
+    /// recent message fits — ambiguity stays audit-only, loudly.</summary>
+    private async Task<Message?> MatchByContentAsync(Dictionary<string, string> p, CancellationToken ct)
+    {
+        var content = p.GetValueOrDefault("mtContent", "");
+        var handset = IngressShared.FirstOf(p, "sourceAddress", "RECIPIENT");
+        if (content.Length == 0 || handset.Length == 0)
+            return null;
+
+        var to = "+" + IngressShared.NormalizeNumber(handset);
+        var since = DateTimeOffset.UtcNow.AddHours(-72);
+        var candidates = await db.Messages
+            .Where(m => m.ToNumber == to && m.Body == content && m.RequestedAt >= since)
+            .OrderByDescending(m => m.RequestedAt)
+            .Take(2)
+            .ToListAsync(ct);
+
+        if (candidates.Count == 1)
+            return candidates[0];
+        if (candidates.Count > 1)
+            logger.LogWarning("DLR content-match ambiguous for ***{Last4} — audit row only", Last4(handset));
+        return null;
+    }
+
+    private static string Last4(string number) => number.Length >= 4 ? number[^4..] : number;
 
     /// <summary>Distinct parts with a delivered receipt, counting the part in-flight
     /// (its event row isn't saved yet). Per-message event volume is tiny — parsing in

@@ -33,6 +33,7 @@ docker run -d --name sologicalsms `
     -e "SologicalSms__SmsCentral__User=$user" `
     -e "SologicalSms__SmsCentral__Password=$pass" `
     -e "SologicalSms__Ingress__VerifyKey=$verify" `
+    -e "SologicalSms__Ingress__RequireVerification=true" `
     --restart unless-stopped `
     sologicalsms:dev
 
