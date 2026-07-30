@@ -7,7 +7,10 @@ Tool-neutral onboarding for anyone (human or AI agent) working in this repo. Rea
 docs first: [feasibility](feasibility.md) (decision + upstream API facts) →
 [roadmap](roadmap.md) (SMS Central → Sinch cutover → RCS) →
 [implementation-plan](implementation-plan.md) (slices S1–S7, gates, surfaces) →
-[design-sms-central](design-sms-central.md) (S1–S4 design). Plans/progress live in these
+[design-sms-central](design-sms-central.md) (S1–S4 design) →
+[findings-upstream-integration](findings-upstream-integration.md) (what the S2–S3 live
+gates taught us: credential classes, webhook templates, the mtId correlation chain — read
+before touching ingress or drivers). Plans/progress live in these
 docs — update them as slices land; tick items visibly, mark open work OPEN.
 
 ## Reference material (read-only — never modify these repos)
