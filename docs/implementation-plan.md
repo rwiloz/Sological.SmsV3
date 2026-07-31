@@ -274,9 +274,12 @@ AIW dev channels — the ElecDemo* idea — vs sharing local; webhook URLs diffe
 instance). SMS Central webhook forward URLs stay pointed at sms-yoga (local) until Ray
 decides which instance owns upstream ingress in dev.
 
-**DEPLOYED 2026-07-31** — v3 is live in Azure dev:
-`https://ca-sologicalsms.orangesky-625283b8.australiaeast.azurecontainerapps.io`
-(`/health` = Healthy; migrations ran on first boot). `ops/infra/container-apps.bicep`
+**DEPLOYED 2026-07-31** — v3 is live in Azure dev: **`https://sms.dev.ai-workforce.au`**
+(custom hostname, ACA managed cert auto-renewing; CNAME + `asuid.sms.dev` TXT at ClouDNS;
+underlying FQDN `ca-sologicalsms.orangesky-625283b8.australiaeast.azurecontainerapps.io`
+also still answers). `/health` = Healthy; migrations ran on first boot.
+`Sms--Sological--BaseUrl` = the custom hostname; the second sub-account's webhook
+forwards should use it too. `ops/infra/container-apps.bicep`
 + `.bicepparam` (modeled on Billing's), image `craiworkforcedev.azurecr.io/sologicalsms:ff6bae5`
 built+pushed manually (no git push — per standing rule). Seeded: 14-row ACMA whitelist,
 customer `aiworkforce`, channel `AIWorkforce` (originator `AIWorkforce`, upstream smscentral,
