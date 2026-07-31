@@ -34,5 +34,15 @@ public class Channel
     /// <summary>Duplicate-detection window for the §6.1a guard (default 1h, per-channel).</summary>
     public int DuplicateWindowSeconds { get; set; } = 3600;
 
+    /// <summary>Hard ceiling on parts submitted per UTC day (public-surface slice,
+    /// 2026-07-31): beyond it the dispatch guard rejects `quota_exceeded`. Null = unlimited.
+    /// Caps total damage from a leaked key that stays politely under the rate limit.</summary>
+    public int? DailyPartLimit { get; set; }
+
+    /// <summary>Normalized E.164 recipients this channel may text; null/empty = unrestricted.
+    /// Dev channels pin this to the operator's test number so a leaked key is a nuisance,
+    /// not a smishing kit.</summary>
+    public string[]? AllowedRecipients { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

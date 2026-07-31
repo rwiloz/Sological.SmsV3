@@ -12,8 +12,10 @@ public static class IngressEndpoints
     public static void MapSmsCentralIngress(this WebApplication app)
     {
         app.MapMethods("/ingress/smscentral/delivery", GetOrPost,
-            (HttpContext ctx, SmsCentralDeliveryIngress ingress, CancellationToken ct) => ingress.HandleAsync(ctx, ct));
+                (HttpContext ctx, SmsCentralDeliveryIngress ingress, CancellationToken ct) => ingress.HandleAsync(ctx, ct))
+            .RequireRateLimiting(RateLimitOptions.IngressPolicy);
         app.MapMethods("/ingress/smscentral/inbound", GetOrPost,
-            (HttpContext ctx, SmsCentralInboundIngress ingress, CancellationToken ct) => ingress.HandleAsync(ctx, ct));
+                (HttpContext ctx, SmsCentralInboundIngress ingress, CancellationToken ct) => ingress.HandleAsync(ctx, ct))
+            .RequireRateLimiting(RateLimitOptions.IngressPolicy);
     }
 }

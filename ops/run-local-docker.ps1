@@ -36,6 +36,7 @@ docker run -d --name sologicalsms `
     -e "SologicalSms__Ingress__VerifyKey=$verify" `
     -e "SologicalSms__Ingress__RequireVerification=true" `
     -e "SologicalSms__Webhook__AIWorkforce=$aiwWebhook" `
+    -e "SologicalSms__Breaker__AlertNumber=+61408004199" `
     --restart unless-stopped `
     sologicalsms:dev
 

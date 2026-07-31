@@ -17,6 +17,7 @@ public class SmsDbContext(DbContextOptions<SmsDbContext> options) : DbContext(op
     public DbSet<BillingLedgerEntry> BillingLedger => Set<BillingLedgerEntry>();
     public DbSet<WebhookOutboxEntry> WebhookOutbox => Set<WebhookOutboxEntry>();
     public DbSet<AllowedOriginator> AllowedOriginators => Set<AllowedOriginator>();
+    public DbSet<UpstreamBreaker> UpstreamBreakers => Set<UpstreamBreaker>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -82,8 +83,23 @@ public class SmsDbContext(DbContextOptions<SmsDbContext> options) : DbContext(op
             e.Property(x => x.RawDescription).HasMaxLength(500);
             e.Property(x => x.Provider).HasMaxLength(32);
             e.Property(x => x.Payload).HasColumnType("jsonb");
+            // The breaker's windowed count of uncorrelated DRs (public-surface slice).
+            e.HasIndex(x => x.ReceivedAt)
+                .HasDatabaseName("ix_delivery_events_unmatched")
+                .HasFilter("message_id IS NULL");
             e.HasOne(x => x.Message).WithMany()
                 .HasForeignKey(x => x.MessageId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UpstreamBreaker>(e =>
+        {
+            e.Property(x => x.Reason).HasMaxLength(200);
+            e.Property(x => x.AlertError).HasMaxLength(500);
+            // The latch: ONE active (un-re-armed) row per upstream; history stays.
+            e.HasIndex(x => x.Upstream)
+                .IsUnique()
+                .HasDatabaseName("ix_upstream_breakers_active")
+                .HasFilter("re_armed_at IS NULL");
         });
 
         modelBuilder.Entity<InboundMessage>(e =>

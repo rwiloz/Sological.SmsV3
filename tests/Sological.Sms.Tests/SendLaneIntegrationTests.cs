@@ -67,6 +67,11 @@ internal sealed class SendLaneFactory(
         builder.UseSetting("SologicalSms:SmsCentral:Password", "subpass");
         builder.UseSetting("SologicalSms:Ingress:VerifyKey", "test-verify-key");
         builder.UseSetting("SologicalSms:Webhook:Test", "whsec-test");
+        // Hermetic default: no rate limiting (tests poll aggressively) and no breaker
+        // (ingress tests post uncorrelated DRs on purpose). The security tests turn
+        // these back on explicitly via extraSettings.
+        builder.UseSetting("SologicalSms:RateLimits:Enabled", "false");
+        builder.UseSetting("SologicalSms:Breaker:Enabled", "false");
         foreach (var (key, value) in extraSettings ?? [])
             builder.UseSetting(key, value);
         builder.ConfigureServices(services =>

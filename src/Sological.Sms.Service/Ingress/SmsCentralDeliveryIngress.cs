@@ -16,6 +16,7 @@ public sealed class SmsCentralDeliveryIngress(
     SmsDbContext db,
     IOptions<SmsCentralOptions> smsCentral,
     IOptions<IngressOptions> ingressOptions,
+    UpstreamBreakerService breaker,
     ILogger<SmsCentralDeliveryIngress> logger)
 {
     public async Task<IResult> HandleAsync(HttpContext ctx, CancellationToken ct)
@@ -88,6 +89,12 @@ public sealed class SmsCentralDeliveryIngress(
             await ApplyVerdictAsync(message, verdict.Value, rawResult, rawStatus, rawDescription, udh, ct);
 
         await db.SaveChangesAsync(ct);
+
+        // Uncorrelated DR = the sub-account processed a send that did NOT come from here.
+        // Counted AFTER commit so this row is included in the breaker's window.
+        if (message is null)
+            await breaker.RecordUnmatchedAsync(ct);
+
         return IngressShared.Ack();
     }
 

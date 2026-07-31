@@ -314,7 +314,25 @@ Verified live: POST /api/v1/messages with the channel key → `403 channel_pause
    directions wired: AIW→v3 (BaseUrl+ApiKey from vault) and v3→AIW (webhook_url+HMAC).
    Azure loop now blocked ONLY by the sender-ID registration in item 1.
 
-## Public-surface security slice (discussed 2026-07-31, awaiting Ray's go)
+## Public-surface security slice — ✅ BUILT 2026-07-31 (Ray's go: "implement what you recommend now for a public service")
+
+Shipped (129/129 tests): **(1) rate limits + body cap** — token bucket per API key on
+send (5/s burst 10), per-IP global window 120/min (health+ingress exempt), ingress
+per-IP 300/min, 64KB body cap, 429+Retry-After envelope, XFF via ForwardLimit=1 (only
+the proxy-attested hop); config `SologicalSms:RateLimits` (master `Enabled` switch —
+test harnesses turn it off). **(2) daily part quota** — `channels.daily_part_limit`,
+dispatch guard on SUBMITTED parts (DB clock, UTC day), terminal `quota_exceeded`,
+unbilled. **(3) recipient allowlist** — `channels.allowed_recipients` (E.164; null =
+unrestricted), dispatch guard after normalization, terminal `recipient_not_allowed`.
+**(4) unknown-DR breaker** — `upstream_breakers` latch (partial unique index per
+upstream, races settled by 23505), trips at 10-unmatched-in-5-min (`SologicalSms:Breaker`),
+pauses ALL active channels on the upstream, one-shot operator alert SMS to
+`Breaker:AlertNumber` (+61408004199 in both deployments) sent DIRECT through the
+upstream seam (unbilled, bypasses the just-paused pipeline); latching — re-arm by
+setting `re_armed_at`, never automatic. Migration `SecurityContainment`. Dev channels
+in BOTH DBs pinned: `allowed_recipients={+61408004199}`, `daily_part_limit=100`.
+
+### Original discussion record (2026-07-31)
 
 Context: `sms.dev.ai-workforce.au` AND `sms-yoga.sological.io` are internet-facing; the
 API is single-message by DESIGN (no batch — upstream RECIPIENTMESSAGES rejected all-or-

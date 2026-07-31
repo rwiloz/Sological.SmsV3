@@ -37,6 +37,7 @@ public class ModelTests
             "billing_ledger",
             "webhook_outbox",
             "allowed_originators", // S2: the ACMA sender-ID whitelist
+            "upstream_breakers",   // public-surface slice: the unknown-DR breaker latch
         ]);
     }
 }

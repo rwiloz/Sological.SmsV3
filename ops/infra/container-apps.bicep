@@ -67,6 +67,8 @@ resource smsService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AzureKeyVault__VaultUri', value: keyVaultUri }
             // Strict SLVERIFY on the SMS Central ingress routes, same as local dev.
             { name: 'SologicalSms__Ingress__RequireVerification', value: 'true' }
+            // Breaker trip -> one-shot operator alert SMS (public-surface slice).
+            { name: 'SologicalSms__Breaker__AlertNumber', value: '+61408004199' }
             // Secrets arrive via Key Vault (SologicalSms--ConnectionStrings--DefaultConnection,
             // --SmsCentral--User/--Password, --Ingress--VerifyKey, --Webhook--AIWorkforce).
           ]

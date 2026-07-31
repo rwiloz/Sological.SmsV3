@@ -151,6 +151,23 @@ public sealed class DispatchWorker(
         }
         message.ToNumber = recipient.Normalized!;
 
+        // Guard 1b — per-channel recipient allowlist (public-surface slice, 2026-07-31):
+        // dev channels pin their audience so a leaked key is contained. Compares the
+        // NORMALIZED number — allowlists store E.164.
+        if (channel.AllowedRecipients is { Length: > 0 } && !channel.AllowedRecipients.Contains(message.ToNumber))
+        {
+            message.Status = MessageStatus.Rejected;
+            message.ErrorCode = "recipient_not_allowed";
+            message.ErrorDetail = $"recipient {message.ToNumber} is not on this channel's allowlist";
+            message.FailedAt = DateTimeOffset.UtcNow;
+            ReleaseClaim(message);
+            Egress.WebhookOutbox.EnqueueDelivery(db, channel, message, logger);
+            await db.SaveChangesAsync(ct);
+            logger.LogWarning("Message {MessageId} rejected: recipient ***{Last4} not on channel {ChannelKey} allowlist",
+                message.Id, Last4(message.ToNumber), channel.Key);
+            return;
+        }
+
         // Guard 2 — duplicate detection (design §6.1a; a PRODUCT feature): same
         // (reference, recipient, body) as an earlier message inside the channel window.
         // Null references compare as equal, so ref-less double-submits are caught too.
@@ -188,6 +205,31 @@ public sealed class DispatchWorker(
             logger.LogWarning("Message {MessageId} rejected: originator {Originator} not whitelisted",
                 message.Id, message.OriginatorUsed);
             return;
+        }
+
+        // Guard 4 — daily part quota (public-surface slice, 2026-07-31): a hard ceiling on
+        // what a channel can spend per UTC day, no matter how politely a leaked key stays
+        // under the rate limit. Counted on SUBMITTED parts (DB clock) so guard verdicts
+        // never consume quota.
+        if (channel.DailyPartLimit is int partLimit)
+        {
+            var usedToday = await db.Database.SqlQuery<int>($"""
+                SELECT COALESCE(SUM(parts), 0)::int AS "Value" FROM messages
+                WHERE channel_id = {channel.Id} AND submitted_at >= date_trunc('day', now())
+                """).SingleAsync(ct);
+            if (usedToday + message.Parts > partLimit)
+            {
+                message.Status = MessageStatus.Rejected;
+                message.ErrorCode = "quota_exceeded";
+                message.ErrorDetail = $"daily part quota ({partLimit}) would be exceeded: {usedToday} part(s) already submitted today (UTC)";
+                message.FailedAt = DateTimeOffset.UtcNow;
+                ReleaseClaim(message);
+                Egress.WebhookOutbox.EnqueueDelivery(db, channel, message, logger);
+                await db.SaveChangesAsync(ct);
+                logger.LogWarning("Message {MessageId} rejected: channel {ChannelKey} daily part quota {Limit} reached ({Used} used)",
+                    message.Id, channel.Key, partLimit, usedToday);
+                return;
+            }
         }
 
         message.Status = MessageStatus.Submitting;

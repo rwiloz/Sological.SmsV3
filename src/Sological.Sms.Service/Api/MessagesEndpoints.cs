@@ -31,7 +31,8 @@ public static class MessagesEndpoints
     public static void MapMessagesApi(this WebApplication app)
     {
         var group = app.MapGroup("/api/v1/messages");
-        group.MapPost("", SendAsync);
+        group.MapPost("", SendAsync)
+            .RequireRateLimiting(RateLimitOptions.SendPolicy); // token bucket per API key
         group.MapGet("/{id:guid}", GetAsync);
     }
 

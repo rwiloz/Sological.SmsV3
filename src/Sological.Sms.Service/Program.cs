@@ -93,6 +93,26 @@ try
     builder.Services.AddScoped<SmsCentralInboundIngress>();
     builder.Services.AddHostedService<InboundPartsSweeper>();
 
+    // ── Public-surface protection (2026-07-31 slice) ───────────────────────────
+    // Rate limits + body cap + unknown-DR breaker. Client IPs arrive via the fronting
+    // proxy (ACA ingress / cloudflared) — ForwardLimit=1 trusts only the RIGHTMOST
+    // forwarded hop, i.e. what OUR proxy appended, not spoofable client-supplied depth.
+    var rateLimits = builder.Configuration.GetSection(RateLimitOptions.SectionName).Get<RateLimitOptions>() ?? new();
+    builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
+    builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                           | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+        o.ForwardLimit = 1;
+        o.KnownIPNetworks.Clear();
+        o.KnownProxies.Clear();
+    });
+    builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = rateLimits.MaxRequestBodyBytes);
+    if (rateLimits.Enabled)
+        builder.Services.AddSmsRateLimiter(rateLimits);
+    builder.Services.Configure<BreakerOptions>(builder.Configuration.GetSection(BreakerOptions.SectionName));
+    builder.Services.AddScoped<UpstreamBreakerService>();
+
     // ── Customer webhook egress (S4) ───────────────────────────────────────────
     builder.Services.Configure<EgressOptions>(builder.Configuration.GetSection(EgressOptions.SectionName));
     builder.Services.AddHttpClient(EgressOptions.HttpClientName);
@@ -100,7 +120,10 @@ try
 
     var app = builder.Build();
 
+    app.UseForwardedHeaders();
     app.UseSerilogRequestLogging();
+    if (rateLimits.Enabled)
+        app.UseRateLimiter();
 
     app.MapHealthChecks("/health");
     app.MapMessagesApi();
