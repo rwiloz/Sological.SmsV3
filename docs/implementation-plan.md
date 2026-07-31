@@ -331,6 +331,12 @@ pauses ALL active channels on the upstream, one-shot operator alert SMS to
 upstream seam (unbilled, bypasses the just-paused pipeline); latching — re-arm by
 setting `re_armed_at`, never automatic. Migration `SecurityContainment`. Dev channels
 in BOTH DBs pinned: `allowed_recipients={+61408004199}`, `daily_part_limit=100`.
+DEPLOYED both environments 2026-07-31; live-verified on the public Azure surface:
+30 concurrent unauthenticated posts → exactly `401 x10, 429 x20` (burst through to
+auth, flood shed). **Ops lesson**: a bicep PUT that omits `customDomains` CLEARS the
+hostname binding (requests fall through to the gateway wildcard and 404 — the
+post-deploy health check was answering from the GATEWAY) — fixed durably by declaring
+the domain + managed-cert ID in the bicep, unlike AIW cd.yml's restore-step approach.
 
 ### Original discussion record (2026-07-31)
 

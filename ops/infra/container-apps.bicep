@@ -25,6 +25,12 @@ param managedIdentityClientId string
 @description('Image tag to deploy (e.g., git SHA or "latest")')
 param imageTag string = 'latest'
 
+@description('Managed-certificate resource ID for the custom hostname. Declared IN the app (not a post-deploy restore step like AIW cd.yml uses) because a bicep PUT that omits customDomains CLEARS the binding — learned live 2026-07-31: requests then fall through to the gateway wildcard and 404.')
+param managedCertificateId string
+
+@description('Custom hostname bound to the app')
+param customHostname string = 'sms.dev.ai-workforce.au'
+
 // ── SMS service Container App (external — SMS Central webhook forwards + AIW sends) ──
 
 resource smsService 'Microsoft.App/containerApps@2024-03-01' = {
@@ -43,6 +49,13 @@ resource smsService 'Microsoft.App/containerApps@2024-03-01' = {
         external: true
         targetPort: 8080
         transport: 'auto'
+        customDomains: [
+          {
+            name: customHostname
+            bindingType: 'SniEnabled'
+            certificateId: managedCertificateId
+          }
+        ]
       }
       registries: [
         {
