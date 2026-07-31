@@ -274,7 +274,31 @@ AIW dev channels — the ElecDemo* idea — vs sharing local; webhook URLs diffe
 instance). SMS Central webhook forward URLs stay pointed at sms-yoga (local) until Ray
 decides which instance owns upstream ingress in dev.
 
-**Progress 2026-07-31** (setup begun, then paused for the v2→v3 repo rename):
+**DEPLOYED 2026-07-31** — v3 is live in Azure dev:
+`https://ca-sologicalsms.orangesky-625283b8.australiaeast.azurecontainerapps.io`
+(`/health` = Healthy; migrations ran on first boot). `ops/infra/container-apps.bicep`
++ `.bicepparam` (modeled on Billing's), image `craiworkforcedev.azurecr.io/sologicalsms:ff6bae5`
+built+pushed manually (no git push — per standing rule). Seeded: 14-row ACMA whitelist,
+customer `aiworkforce`, channel `AIWorkforce` (originator `AIWorkforce`, upstream smscentral,
+**status=paused** — the kill-switch stays on until SMS Central creds exist and Ray gates a
+smoke). Operator channel auto-bootstrapped paused. Real KV (`kv-aiworkforce-dev`) carries:
+`SologicalSms--ConnectionStrings--DefaultConnection`, `--Ingress--VerifyKey` (fresh),
+`--Webhook--AIWorkforce` (fresh; same value stored as `Sms--Sological--WebhookSecret`),
+`Sms--Sological--ApiKey` (the Azure channel's plaintext key), `Sms--Sological--BaseUrl`
+(the FQDN). NO `SologicalSms--SmsCentral--User/--Password` in Azure yet — deliberate.
+Verified live: POST /api/v1/messages with the channel key → `403 channel_paused`
+(auth + DB + KV chain proven, zero upstream contact).
+
+**Still open to go live**:
+1. Ray creates the second SMS Central sub-account (ruled direction) → wrapper creds into
+   `SologicalSms--SmsCentral--User/--Password` in `kv-aiworkforce-dev` → restart revision →
+   configure that sub-account's webhook forwards to the ACA FQDN with the new VerifyKey →
+   unpause + Ray-gated smoke to 0408004199.
+2. The Azure AIW instance runs pre-S4 code (provider repoint not deployed there) — it can't
+   speak to v3 until the AI-Workforce repo's S4 commits reach Azure via its own CD; its
+   restart then also picks up the new `Sms--Sological--*` KV values.
+
+**Earlier discovery notes** (setup begun, then paused for the v2→v3 repo rename):
 - Shared-infra names confirmed (from `Billing\ops\infra\container-apps.bicepparam` +
   `AI-Workforce\ops\infra\main.bicep`): subscription `0f2cd63f…` / `rg-aiworkforce-dev` /
   `cae-aiworkforce-dev` / `craiworkforcedev.azurecr.io` / `kv-aiworkforce-dev` /
