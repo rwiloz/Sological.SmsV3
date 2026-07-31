@@ -314,6 +314,36 @@ Verified live: POST /api/v1/messages with the channel key → `403 channel_pause
    directions wired: AIW→v3 (BaseUrl+ApiKey from vault) and v3→AIW (webhook_url+HMAC).
    Azure loop now blocked ONLY by the sender-ID registration in item 1.
 
+## Public-surface security slice (discussed 2026-07-31, awaiting Ray's go)
+
+Context: `sms.dev.ai-workforce.au` AND `sms-yoga.sological.io` are internet-facing; the
+API is single-message by DESIGN (no batch — upstream RECIPIENTMESSAGES rejected all-or-
+nothing, which fights per-message honesty; a bulk endpoint fanning out to N messages is
+the S7-shaped answer if a real need appears). NO rate limiting exists today. Agreed
+threat framing: a leaked CHANNEL key = full channel compromise (smishing as the ACMA-
+registered sender at our cost) until paused/rotated; a compromised SUB-ACCOUNT credential
+shows up as DRs that correlate to nothing (v3 never sent them — only portal test sends
+legitimately produce these).
+
+The slice (contained: guard-chain/ingress work + config, no UI dependency):
+1. **Rate limits + body cap** — ASP.NET built-in limiter: token bucket per API key on
+   send (~5/s burst 10, 429+Retry-After), per-IP window globally (~100/min; ingress
+   routes ~300/min — DR bursts clump), ~64KB body cap. Config `SologicalSms:RateLimits`.
+2. **Per-channel daily part quota** — nullable `daily_part_limit`, dispatch guard,
+   terminal `quota_exceeded` (loud). Caps total damage/day from a polite attacker.
+3. **Dev-channel recipient allowlist** — per-channel `allowed_recipients` (null =
+   unrestricted): dev channels can ONLY text 0408004199 → leaked dev key = nuisance,
+   not incident.
+4. **Unknown-DR circuit breaker** — windowed count of uncorrelated delivery_events
+   (~10 in 5 min, configurable) → auto-pause ALL channels on that upstream, LATCHING
+   (human re-arms). Detects sub-account cred abuse in minutes; remediation is still
+   rotating the SMS Central password — the breaker stops co-mingled spend and raises
+   the flag. Portal test sends stay under threshold by design.
+
+**Monitoring/alerting: LATER (Ray, 2026-07-31)** — detection layer beyond the breaker
+(ledger anomaly checks, dead outbox rows, breaker state, uptime). Natural home: S7
+management API exposes ops state, AIW admin UI surfaces it; alert delivery TBD.
+
 **Earlier discovery notes** (setup begun, then paused for the v2→v3 repo rename):
 - Shared-infra names confirmed (from `Billing\ops\infra\container-apps.bicepparam` +
   `AI-Workforce\ops\infra\main.bicep`): subscription `0f2cd63f…` / `rg-aiworkforce-dev` /
