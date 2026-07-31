@@ -293,10 +293,13 @@ Verified live: POST /api/v1/messages with the channel key → `403 channel_pause
 (auth + DB + KV chain proven, zero upstream contact).
 
 **Still open to go live**:
-1. Ray creates the second SMS Central sub-account (ruled direction) → wrapper creds into
-   `SologicalSms--SmsCentral--User/--Password` in `kv-aiworkforce-dev` → restart revision →
-   configure that sub-account's webhook forwards to the ACA FQDN with the new VerifyKey →
-   unpause + Ray-gated smoke to 0408004199.
+1. ~~Second sub-account~~ DONE 2026-07-31: sub-account `AIWorkforce-dev` created, wrapper
+   creds in `kv-aiworkforce-dev` (`SologicalSms--SmsCentral--User/--Password`), revision
+   restarted Healthy with them bound. REMAINING: Ray configures the sub-account's webhook
+   forwards (POST `https://sms.dev.ai-workforce.au/ingress/smscentral/{delivery,inbound}`
+   + SLVERIFY header = Azure VerifyKey + the template-parameter field mappings) → then
+   unpause + Ray-gated smoke to 0408004199. No dedicated inbound number on this
+   sub-account yet — Azure = send + delivered-DLRs, replies stay local-dev.
 2. The Azure AIW instance runs pre-S4 code (provider repoint not deployed there) — it can't
    speak to v3 until the AI-Workforce repo's S4 commits reach Azure via its own CD; its
    restart then also picks up the new `Sms--Sological--*` KV values.
