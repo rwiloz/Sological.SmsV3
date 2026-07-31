@@ -339,6 +339,14 @@ The slice (contained: guard-chain/ingress work + config, no UI dependency):
    (human re-arms). Detects sub-account cred abuse in minutes; remediation is still
    rotating the SMS Central password — the breaker stops co-mingled spend and raises
    the flag. Portal test sends stay under threshold by design.
+   **+ operator alert SMS (Ray, 2026-07-31)**: on trip, ONE best-effort SMS to
+   `SologicalSms:Operator:AlertNumber` (0408004199) via the Operator channel with a
+   breaker exemption — the latch makes it one-shot (no storm). Caveats accepted: it
+   rides the suspect upstream (protection is the latch, SMS is only notification;
+   S6's second driver can route alerts around the suspect upstream later), and the
+   alert originator must be REGISTERED on the sub-account (today's 333 lesson —
+   register `SoLogical` alongside `AIWorkforce` when doing the AIWorkforce-dev
+   nomination, or the alert borrows the registered sender).
 
 **Monitoring/alerting: LATER (Ray, 2026-07-31)** — detection layer beyond the breaker
 (ledger anomaly checks, dead outbox rows, breaker state, uptime). Natural home: S7
