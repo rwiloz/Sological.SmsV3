@@ -295,10 +295,17 @@ Verified live: POST /api/v1/messages with the channel key → `403 channel_pause
 **Still open to go live**:
 1. ~~Second sub-account~~ DONE 2026-07-31: sub-account `AIWorkforce-dev` created, wrapper
    creds in `kv-aiworkforce-dev` (`SologicalSms--SmsCentral--User/--Password`), revision
-   restarted Healthy with them bound. REMAINING: Ray configures the sub-account's webhook
-   forwards (POST `https://sms.dev.ai-workforce.au/ingress/smscentral/{delivery,inbound}`
-   + SLVERIFY header = Azure VerifyKey + the template-parameter field mappings) → then
-   unpause + Ray-gated smoke to 0408004199. No dedicated inbound number on this
+   restarted Healthy with them bound. Webhook forwards configured by Ray and PROVEN LIVE
+   2026-07-31: gated smoke msg `019fb65e-fa26-…` → wrapper accepted → TWO DRs pushed to
+   `sms.dev.ai-workforce.au` through strict SLVERIFY, template params fully populated,
+   mtId-correlated, statuses mapped honestly (`enroute`/101 then `rejected`/333).
+   **BLOCKER (carrier-side): wrapper/DR code 333 = alpha sender `AIWorkforce` not
+   ACMA-registered FOR THIS SUB-ACCOUNT** (SMS Central emailed Ray confirming: unregistered
+   alpha sender IDs are not delivered). The register entry (SOLOGICAL PTY LTD) authorizes
+   the ORIGINAL sub-account only — Ray to add `AIWorkforce-dev` to the nomination via
+   portal/account manager. Channel re-PAUSED; no sends without Ray's explicit go.
+   Same `reference`=`$metadata.get('REFERENCE')` unresolved-literal quirk as local —
+   harmless (mtId chain does correlation). No dedicated inbound number on this
    sub-account yet — Azure = send + delivered-DLRs, replies stay local-dev.
 2. The Azure AIW instance runs pre-S4 code (provider repoint not deployed there) — it can't
    speak to v3 until the AI-Workforce repo's S4 commits reach Azure via its own CD; its
