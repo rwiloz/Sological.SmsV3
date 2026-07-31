@@ -134,7 +134,7 @@ try
         }
     }
 
-    Log.Information("Sological SMS v2 service starting");
+    Log.Information("Sological SMS v3 service starting");
     await app.RunAsync();
 }
 catch (Exception ex) when (ex is not HostAbortedException)

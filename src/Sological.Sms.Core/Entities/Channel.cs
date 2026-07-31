@@ -1,7 +1,7 @@
 namespace Sological.Sms.Core.Entities;
 
 /// <summary>A customer's sending identity + credentials (design §2). Auth is API keys ONLY
-/// (two live for rotation, stored hashed) — no IP allowlisting in v2 (ruled 2026-07-27).</summary>
+/// (two live for rotation, stored hashed) — no IP allowlisting in v3 (ruled 2026-07-27).</summary>
 public class Channel
 {
     public long Id { get; set; }
@@ -24,7 +24,7 @@ public class Channel
 
     public string? WebhookUrl { get; set; }
 
-    /// <summary>Secret-store NAME of the webhook HMAC secret (SmsV2:Webhook:{channelKey}) — never the value.</summary>
+    /// <summary>Secret-store NAME of the webhook HMAC secret (SmsV3:Webhook:{channelKey}) — never the value.</summary>
     public string? WebhookSecretName { get; set; }
 
     public UpstreamProvider Upstream { get; set; } = UpstreamProvider.SmsCentral;

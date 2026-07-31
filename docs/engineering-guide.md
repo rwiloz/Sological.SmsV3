@@ -75,7 +75,7 @@ YARP, seed ratchet) — **does not apply here**. What DOES apply in this repo:
   wins on overlap); **hermetic test harnesses must blank `AzureKeyVault__VaultUri`**.
   Ops scripts to crib: AI-Workforce `setup_keyvault_emulator.ps1` / `seed_keyvault_emulator.ps1`.
 - Secret names — canonical namespace is **`SologicalSms:`** (Ray's naming 2026-07-27, set
-  when the first live secret landed; supersedes the `SmsV2:` spelling in early drafts):
+  when the first live secret landed; supersedes the `SmsV3:` spelling in early drafts):
   `SologicalSms:SmsCentral:User|Password`, `SologicalSms:Sinch:ApiKey` (S6),
   `SologicalSms:Webhook:{channelKey}`. Azure = real Key Vault, same names (vault secret
   names spell `:` as `--`, e.g. `SologicalSms--SmsCentral--User`).

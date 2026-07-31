@@ -1,6 +1,6 @@
 -- The ACMA-registered sender-ID whitelist (Ray, 2026-07-27) — all listed "Ready to use"
 -- on the ACMA SMS Sender ID Register. ACMA registration matching is case-INSENSITIVE
--- ('ABC' = 'abc'), but handsets display the literal string sent, so v2 stores the
+-- ('ABC' = 'abc'), but handsets display the literal string sent, so v3 stores the
 -- register's display casing and the dispatch guard matches EXACTLY — channels must be
 -- seeded with these exact spellings (one channel per sender ID).
 -- Idempotent: safe to re-run; run against sologicalsms (local) or the Azure DB later.

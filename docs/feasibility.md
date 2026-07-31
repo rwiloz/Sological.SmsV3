@@ -2,7 +2,7 @@
 
 **Created:** 2026-07-27
 **Modified:** 2026-07-27
-**Status:** DECIDED — build Sological SMS v2 (this repo), SMS Central upstream first.
+**Status:** DECIDED — build Sological SMS v3 (this repo), SMS Central upstream first.
 
 The trigger: AI-Workforce's comms capability needs SMS **inbound** and **delivery receipts**
 wired up. Its send path already works through the old Sological gateway; nothing pushes inbound
@@ -105,7 +105,7 @@ From `C:\Code\New.Sms\openapi.json` (Sinch Engage 2.1.0) + web verification 2026
 
 ## Decision
 
-Build **Sological SMS v2** (this repo): standalone service, customer/channel registry,
+Build **Sological SMS v3** (this repo): standalone service, customer/channel registry,
 message store, append-only billing ledger, webhook egress to customers, upstream driver seam.
 **SMS Central sub-account first** (AI-Workforce live now), **Sinch Engage v1 (AU instance)**
 as the cutover driver, **Conversation API reserved for RCS** pending residency. Options A/B
@@ -115,8 +115,8 @@ die with the Delphi box; option C's shapes live on inside the SMS Central driver
 
 - `SologicalSmsProvider.SendWithTrackingAsync` hardcodes `smsdr.sological.com.au` — the code
   comment reads "dr" as *delivery receipt* but it is the **disaster-recovery** host: every
-  tracked comms send routes via DR today. Fix when re-pointing at v2.
+  tracked comms send routes via DR today. Fix when re-pointing at v3.
 - The send response's `OK {SMSID}` is discarded; AI-Workforce correlates on its own generated
-  ref. Under v2 the correlation contract is explicit (see design §7).
+  ref. Under v3 the correlation contract is explicit (see design §7).
 - AI-Workforce's `SmsWebhookController` (POST JSON + `X-Sms-Api-Key`) was built for a push
-  model the old gateway never had — it is ~the right shape for v2's webhook egress.
+  model the old gateway never had — it is ~the right shape for v3's webhook egress.

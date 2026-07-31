@@ -1,4 +1,4 @@
-# Sological SMS v2
+# Sological SMS v3
 
 The rewrite of the Sological SMS gateway: a standalone .NET service that fronts customer SMS
 traffic (send, inbound, delivery receipts), keeps per-customer segregation and billing records,

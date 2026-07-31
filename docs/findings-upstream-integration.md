@@ -10,7 +10,7 @@ looked broken and what turned out to be true" record.
 
 ## Architecture answer (asked 2026-07-30): ONE service, drivers not services
 
-v2 is **one service, one database** (`Sological.Sms.Service` + `sologicalsms`). SMS Central
+v3 is **one service, one database** (`Sological.Sms.Service` + `sologicalsms`). SMS Central
 vs Sinch is NOT two services — upstream providers are **drivers behind the `ISmsUpstream`
 seam inside the same service**, selected per channel (`channels.upstream`:
 `smscentral` today, `sinch` at S6). One deployment carries both during cutover; the flip is
@@ -21,11 +21,11 @@ MessageMedia platform account** with two API surfaces on the same account:
 
 | Surface | URL | Creds class | Used for |
 |---|---|---|---|
-| Legacy "wrapper" | `my.smscentral.com.au/wrapper/sms` | account username/password (`sological2`) | v2 sends TODAY (S2+, proven live) |
+| Legacy "wrapper" | `my.smscentral.com.au/wrapper/sms` | account username/password (`sological2`) | v3 sends TODAY (S2+, proven live) |
 | Engage v1 REST | `au.app.api.sinch.com` (alias `api.messagemedia.com`) | separate revocable API key+secret (Basic/HMAC) — self-service in the Hub, NOT yet issued for the sub-account | S6 send driver + webhook management; docs: https://docs.app.api.sinch.com/ |
 
 The webhook push engine serving our S3 receivers is the platform's (Engage) engine — it
-serves BOTH surfaces. "Cutover" for v2's own traffic is therefore a driver flip on the same
+serves BOTH surfaces. "Cutover" for v3's own traffic is therefore a driver flip on the same
 account, not an account migration. The separate "new Sinch (starter) account" is a sandbox:
 REST keys work there (`SologicalSms--SinchTest--*`), no credit/sender IDs/sub-accounts; used
 to validate auth + webhook definitions; later the S6 rehearsal rig.

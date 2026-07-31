@@ -1,4 +1,4 @@
-# Run Sological SMS v2 as a local Docker container — the Cloudflare-tunnel origin for
+# Run Sological SMS v3 as a local Docker container — the Cloudflare-tunnel origin for
 # SMS Central webhook callbacks (S3+). Safe to re-run: rebuilds the image and replaces the
 # container. No secrets live in this file: the DB connection comes from the User-scoped
 # SologicalSms__ConnectionStrings__DefaultConnection env var (host rewritten for the docker

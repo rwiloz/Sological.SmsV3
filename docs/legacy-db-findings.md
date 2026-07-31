@@ -6,7 +6,7 @@
 local throwaway container). No message bodies, recipient numbers, or credential values were
 extracted — flags/aggregates only. Re-mine any time: restore the bak and re-run the queries.
 
-## Scale (what v2 must comfortably carry)
+## Scale (what v3 must comfortably carry)
 
 | Fact | Value |
 |---|---|
@@ -47,7 +47,7 @@ extracted — flags/aggregates only. Re-mine any time: restore the bak and re-ru
 - ⚠ AI-Workforce note: the gateway channel is `AIDemoX`, but AI-Workforce is deliberately
   configured with `AIDemo` — **a forced mismatch Ray uses as a TEMPORARY SMS kill-switch**
   (unknown channel ⇒ send fails ⇒ no real SMS from dev). Don't "fix" the config value in the
-  meantime; the mismatch retires at S4 when v2 gives the first-class control — the channel
+  meantime; the mismatch retires at S4 when v3 gives the first-class control — the channel
   row's `status` (paused) is how a channel becomes safely un-sendable from then on.
 
 ## Reference (ExtRef) behaviour — design corrections
@@ -56,7 +56,7 @@ extracted — flags/aggregates only. Re-mine any time: restore the bak and re-ru
   13,543 on 47, 5,386 on 7. Max observed length 9 chars, mostly numeric, never empty.
 - ⇒ **S5 legacy emulation must ACCEPT duplicate refs** (the Delphi gateway always did);
   ref-uniqueness (409) applies to the NEW `/api/v1/messages` surface only. The upstream
-  513-duplicate rule never bites either way because the upstream REFERENCE is v2's message
+  513-duplicate rule never bites either way because the upstream REFERENCE is v3's message
   uuid, not the caller's ref — same trick the Delphi gateway used (it passed its SMSID).
 - New-style customers (`Cus*`) already use short numeric refs with near-zero duplication.
 
@@ -68,7 +68,7 @@ AU mobile or `+`-international; `0400000000` sentinel rejected) and by upstream 
 `E` **DUPLICATE** (not "error") · `X` historical pending-reset lane (vw_Report counts it as
 Pending) · rare NULL. 12m distribution: D 295,637 · F 12,844 · S 10,170 · E(dup) 1,338 · I 439.
 
-### Duplicate detection — a PRODUCT FEATURE, carried into v2 (Ray, 2026-07-27)
+### Duplicate detection — a PRODUCT FEATURE, carried into v3 (Ray, 2026-07-27)
 
 The processor (uDMExetelSMS.pas `Mark Duplicates`, before every send sweep): a queued (`N`)
 message is flagged `E` and **never dispatched** when an earlier message with the **same
@@ -90,7 +90,7 @@ in 12m (~0.4% of traffic) — it's the double-submit safety net.
    62 legacy channels are dead — archive, don't migrate.
 4. Delivery evidence maps from status letters + `SMSDeliveryStatus`, never `DeliveredDT`.
 5. Ref-uniqueness enforcement is new-API-only (above).
-6. **Duplicate detection ships as a v2 pipeline guard** (design §6.1a): terminal `duplicate`
+6. **Duplicate detection ships as a v3 pipeline guard** (design §6.1a): terminal `duplicate`
    status, never dispatched, never billed — legacy rule (ref+recipient+body, 1h) preserved
    exactly on the S5 surface; per-channel window on the new API.
 7. **Local recipient validation ships pre-dispatch** (AU-mobile/international shape) —

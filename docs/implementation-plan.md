@@ -56,7 +56,7 @@ recipient-normalize → duplicate → whitelist, `Retryable` on `UpstreamSubmitR
 - ✅ sub-account password in the KV emulator (`SologicalSms--SmsCentral--Password`, Ray,
   2026-07-27) — creds complete.
 - ✅ whitelist seeded: the 14 ACMA-registered "Ready to use" sender IDs
-  (`ops/seed-whitelist.sql`; ACMA matching is case-insensitive, v2 stores/enforces the
+  (`ops/seed-whitelist.sql`; ACMA matching is case-insensitive, v3 stores/enforces the
   register's display casing). `AIWorkforce` (SOLOGICAL PTY LTD) is registered — the likely
   §10 Q2 answer for SENDING; note an alpha sender ID cannot receive replies, so inbound for
   AI-Workforce still needs the dedicated-number decision by S3/S4.
@@ -67,7 +67,7 @@ recipient-normalize → duplicate → whitelist, `Retryable` on `UpstreamSubmitR
   attempt (`smoke-001`, msg `019fa182-a3b8-7c1a-a698-00f7aed09439`), ledger row 1 unit
   outbound/message, **handset receipt confirmed by Ray** (sender displayed as the
   registered `AIWorkforce` ID), **and the message is visible in the SMS Central
-  SUB-account portal** — confirming the isolation model: v2 traffic rides the sub-account,
+  SUB-account portal** — confirming the isolation model: v3 traffic rides the sub-account,
   the old gateway's account untouched. Status stays `sent` until S3 builds the DLR
   receiver — `delivered` is S3's gate, not S2's.
 
@@ -181,9 +181,9 @@ then referenced message). Public HTTPS hostname for the receivers.
   `inbound_messages` row correlated to the sent message. Multipart inbound (>160 chars)
   reassembles. ⚠ Prereq on Ray: sub-account forward URLs set to the receivers.
 
-## S4 — Customer webhook egress + AI-Workforce wiring — ⏳ v2 SIDE BUILT 2026-07-30
+## S4 — Customer webhook egress + AI-Workforce wiring — ⏳ v3 SIDE BUILT 2026-07-30
 
-v2's half is built, tested (125/125) and deployed: outbox rows are written in the SAME
+v3's half is built, tested (125/125) and deployed: outbox rows are written in the SAME
 transaction as every state change (dispatch: sent/rejected/failed; DLR ingress:
 delivered/failed/expired/rejected; inbound ingress + sweeper: sms.inbound with `replyTo`
 when correlated — explicit `null` otherwise, per contract); the egress worker claims
@@ -216,10 +216,10 @@ live key (a dev send gets an honest 403 channel_paused).
 - ⚠ **Gate (Ray-approved)**: case SMS send → delivery signal lands on the case; customer
   reply → case-targeted inbox signal via exact `replyTo` correlation. **Closes the
   capability gap that started the project.**
-- **2026-07-31: TRANSPORT LOOP CLOSED LIVE.** AIW test-send → v2 → SMS from 0438887301 →
+- **2026-07-31: TRANSPORT LOOP CLOSED LIVE.** AIW test-send → v3 → SMS from 0438887301 →
   Ray's phone; DR chain → `delivered` (mtId); reply → exact `reply_to`; all three signed
   webhooks delivered (after fixing the container's missing webhook-secret env — `941be92`);
-  AIW's contact row settled `status=delivered` with `provider_ref` = the v2 message id
+  AIW's contact row settled `status=delivered` with `provider_ref` = the v3 message id
   (verified in comms.contacts), reply correctly non-case (source=test). **Remaining for
   the formal gate: one MEDULLA/case send → reply → case-targeted inbox signal.**
 - **Gate-run status 2026-07-30:** receive pipe FULLY verified (signed probe →
@@ -227,13 +227,13 @@ live key (a dev send gets an honest 403 channel_paused).
   the AIW Keys & Secrets UI (write-through verified in the vault; binds on next System
   restart). No send has entered the pipeline yet: the 403 in the AIW logs was the
   TEMPLATE SAVE endpoint, and the SMS send-test isn't enabled in the current AIW build —
-  both AI-Workforce-UI matters, being taken up in that repo's own session. v2 side needs
+  both AI-Workforce-UI matters, being taken up in that repo's own session. v3 side needs
   nothing and is watching. Recipient-gate note: dev REDIRECTS all SMS to Ray's number, so
   no whitelist rule is needed (redirect still sends; only block stops).
 
-> Staged already (2026-07-27): the v2 `AIWorkforce` channel's API key is in AI-Workforce's
+> Staged already (2026-07-27): the v3 `AIWorkforce` channel's API key is in AI-Workforce's
 > local KV emulator secret `Sms:Sological:ApiKey` — the repoint will use it as `X-Api-Key`.
-> The v2 API has NO Channel parameter (the key IS the channel identity), and this v2
+> The v3 API has NO Channel parameter (the key IS the channel identity), and this v3
 > channel is the SUCCESSOR of legacy `AIDemo`/`AIDemoX` — same concept/use (AI-Workforce's
 > SMS lane), renamed `AIWorkforce` (Ray, 2026-07-27). The AIDemo kill-switch mismatch stays
 > in place (and keeps blocking dev sends at the old gateway) until the S4 repoint, when
@@ -249,7 +249,7 @@ live key (a dev send gets an honest 403 channel_paused).
 Webhook outbox worker: per-channel `webhook_url` + secret; `sms.inbound` + `sms.delivery`
 JSON POSTs, HMAC-signed, retry with backoff + dead-letter marking. Poll-parity endpoint for
 debugging. Then the AI-Workforce side (in the AI-Workforce repo, its own commit set): point
-`SologicalSmsProvider` at v2's send API, align `SmsWebhookController` to the v2 payloads,
+`SologicalSmsProvider` at v3's send API, align `SmsWebhookController` to the v3 payloads,
 delete the `smsdr` misread, upgrade `InboundSmsHandler` correlation to use `replyTo` when
 present (window heuristic stays as fallback).
 
@@ -261,7 +261,7 @@ present (window heuristic stays as fallback).
 
 ## Azure DEV deployment — ⚠ ACTIVE, requested by Ray 2026-07-31
 
-The AI-Workforce Azure dev instance needs v2 reachable in Azure (local docker + tunnels
+The AI-Workforce Azure dev instance needs v3 reachable in Azure (local docker + tunnels
 serves only the local dev loop). Target per feasibility/§9: Container App beside the
 Billing service, own database `sologicalsms` on the existing Azure PSQL server, real Key
 Vault carrying the same secret names (`SologicalSms--*`), migrations-on-start already
@@ -274,10 +274,28 @@ AIW dev channels — the ElecDemo* idea — vs sharing local; webhook URLs diffe
 instance). SMS Central webhook forward URLs stay pointed at sms-yoga (local) until Ray
 decides which instance owns upstream ingress in dev.
 
+**Progress 2026-07-31** (setup begun, then paused for the v2→v3 repo rename):
+- Shared-infra names confirmed (from `Billing\ops\infra\container-apps.bicepparam` +
+  `AI-Workforce\ops\infra\main.bicep`): subscription `0f2cd63f…` / `rg-aiworkforce-dev` /
+  `cae-aiworkforce-dev` / `craiworkforcedev.azurecr.io` / `kv-aiworkforce-dev` /
+  identity `id-aiworkforce-dev` (client `9488f698…`) / `psql-aiworkforce-dev`, australiaeast.
+- **DONE: `sologicalsms` database created** on `psql-aiworkforce-dev` (az CLI, name is
+  version-neutral — unaffected by the rename). Nothing else exists in Azure yet.
+- `Program.cs` needs NO changes: real-KV loading via `AzureKeyVault:VaultUri` +
+  `DefaultAzureCredential`/`AZURE_CLIENT_ID` already in place (Billing pattern).
+- Plan agreed with Ray: manual image push (no git push), default ACA FQDN for now,
+  bicep modeled on Billing's `ca-billing-api` (external ingress → 8080, probes on
+  `/health`, minReplicas 1). Deploy creds-less with channels paused.
+- **Sub-account ruling pending**: recommended a SECOND SMS Central sub-account for the
+  Azure instance (own webhook-forward config → Azure owns its DLR chain without touching
+  local's; separate creds). Azure = send + delivered-DLRs; replies need a second dedicated
+  inbound number (cost) — deferred. Ray to create the sub-account + provide wrapper creds;
+  nothing blocks on it (slot creds into KV after, restart revision).
+
 ## S7 note (pulled-forward proposal, 2026-07-31 — awaiting Ray's ruling)
 
-Ray proposed: v2 grows a MANAGEMENT API and the admin UI lives in AI-Workforce's admin
-dashboard. Recommended shape: v2 stays the authority (standalone management API, operator-
+Ray proposed: v3 grows a MANAGEMENT API and the admin UI lives in AI-Workforce's admin
+dashboard. Recommended shape: v3 stays the authority (standalone management API, operator-
 class credential `SologicalSms:Admin:ApiKey` — never per-channel keys); AIW's System
 service proxies server-side so the key never reaches a browser and the platform login is
 inherited. Suggested pull-forward: a minimal ops slice (dead-letter view/requeue, channel
@@ -290,24 +308,24 @@ hand SQL. Customer self-service, if ever, is a separate channel-scoped surface.
 > caller supports only SSL 1.0-era protocols — no modern edge (Cloudflare, Container Apps
 > ingress) will terminate that, so the plain repoint of `sms.sological.com.au` breaks that
 > client. Likely shape: the old box (or a small shim on it) stays as a PROTOCOL-DOWNGRADE
-> PROXY, accepting the ancient TLS and forwarding to v2's legacy-emulation routes; DNS
+> PROXY, accepting the ancient TLS and forwarding to v3's legacy-emulation routes; DNS
 > repoint then only affects modern callers. Inventory which channels' callers have this
 > constraint during the S5 planning pass.
 
 Byte-compatible `isapi/submitsms.dll/sendsms`, `checkstatus`, `getsms` routes mapped onto the
-v2 store (status letters N/S/D/F/E/I; `getsms` consume-once semantics preserved; tab-separated
+v3 store (status letters N/S/D/F/E/I; `getsms` consume-once semantics preserved; tab-separated
 response shapes exact). Channel = legacy `ExternalID`; ApiKey1/2 honored. **No IP allowlisting
-in v2 (ruled 2026-07-27)** — `SMSValidIP` is not carried, so any legacy channel that
+in v3 (ruled 2026-07-27)** — `SMSValidIP` is not carried, so any legacy channel that
 authenticates by IP alone today (the Delphi code only checks ApiKey when one is set) MUST be
 issued API keys before its repoint. That key-issuance sweep is a migration prerequisite on the
 customer checklist, not code — **the sweep list is known: channels 2, 7, 8, 46, 47, 52 (+ Test)**,
 per [legacy-db-findings](legacy-db-findings.md). Import script: ACTIVE `SMSChannel` rows only
 (the findings table; 62 dead channels archive, don't migrate; `AIDemoX`/`AIWorkforceDevX`
-do NOT import either — superseded by the v2-native `AIWorkforce` channel, Ray 2026-07-27). Legacy emulation ACCEPTS
+do NOT import either — superseded by the v3-native `AIWorkforce` channel, Ray 2026-07-27). Legacy emulation ACCEPTS
 duplicate refs (legacy callers reuse them heavily) — ref-uniqueness is new-API-only.
 
 - **Surfaces:** the three legacy routes on the legacy hostnames (`sms.sological.com.au`,
-  `smsdr.sological.com.au` both → v2).
+  `smsdr.sological.com.au` both → v3).
 - **Gate:** a captured corpus of real legacy request/response pairs replays identically;
   one pilot customer channel repointed and observed for a week before the rest.
 

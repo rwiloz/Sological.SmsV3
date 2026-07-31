@@ -1,4 +1,4 @@
-# Sological SMS v2 — agent bootstrap
+# Sological SMS v3 — agent bootstrap
 
 All orientation lives in tool-neutral repo docs — **start with
 [docs/engineering-guide.md](docs/engineering-guide.md)** (reference-repo map, coding

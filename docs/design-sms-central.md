@@ -1,4 +1,4 @@
-# Design — first step: v2 core on SMS Central (slices S1–S4)
+# Design — first step: v3 core on SMS Central (slices S1–S4)
 
 **Created:** 2026-07-27
 **Modified:** 2026-07-27
@@ -27,7 +27,7 @@ idempotency at every boundary (upstream retries its pushes — duplication is th
 `customer` = a billing party (AI-Workforce, connectnow, …). `channel` = a customer's sending
 identity + credentials: legacy `ExternalID`-equivalent key, API keys (two live for rotation,
 stored hashed), originator config, webhook config, upstream selection. **Auth is API keys
-ONLY — no IP allowlisting in v2 (ruled 2026-07-27)**; the legacy `SMSValidIP` mechanism dies
+ONLY — no IP allowlisting in v3 (ruled 2026-07-27)**; the legacy `SMSValidIP` mechanism dies
 with the Delphi box (consequence recorded at S5).
 Every row in every table hangs off `channel_id` (and denormalized `customer_id` where queries
 need it). Segregation is row-level + per-channel keys; there is no cross-channel read path on
@@ -143,7 +143,7 @@ it's a reply), `MESSAGE_TEXT` **or** `UDH`+`BINARY` (+`DCS`; 8 = UCS-2) for mult
 Routing precedence: `REFERENCE` → message → channel (authoritative for replies) ·
 `RECIPIENT` = a channel's dedicated number · else quarantine row on the operator channel
 (never dropped, never 500). Reassembly per §3 `inbound_parts`. STOP/opt-out is NOT handled
-here — opt-out policy is the customer's plane (AI-Workforce comms already owns it); v2 is
+here — opt-out policy is the customer's plane (AI-Workforce comms already owns it); v3 is
 honest transport. (Upstream blacklist additions arrive as 519 rejects and surface as such.)
 
 ## 6. Customer egress (webhooks) + send API
@@ -202,22 +202,22 @@ non-2xx/timeouts retry per outbox backoff then `dead` (visible in ops queries + 
 
 ## 7. AI-Workforce wiring (S4's second half — lives in the AI-Workforce repo)
 
-- `SologicalSmsProvider` → v2: `POST /api/v1/messages` with `reference` = the refNo it already
+- `SologicalSmsProvider` → v3: `POST /api/v1/messages` with `reference` = the refNo it already
   generates; store returned `messageId` as `SmsSendResult.MessageId` → `contact.ProviderRef`
   carries a REAL upstream handle at last. Delete the `smsdr` DR-host misread and the
-  `UseFallBackEndPoint` flag (v2 owns upstream failover).
+  `UseFallBackEndPoint` flag (v3 owns upstream failover).
 - `SmsWebhookController`: keep route + `X-Sms-Api-Key` (or upgrade to the HMAC header — Ray's
   call), align fields: `sms.delivery.messageId` → its `MessageId`, statuses map 1:1 onto its
   existing `NormalizeDeliveryState`; `sms.inbound` → `InboundSmsEvent` unchanged.
 - `InboundSmsHandler`: when `replyTo.reference` is present, correlate the case reply EXACTLY
   (it equals the send's refNo → resolvable to the contact row) instead of the 14-day-window
   heuristic; the window stays as fallback for uncorrelated inbound. Comms-side recipient
-  safety (whitelist/redirect, STOP, consent) is untouched — v2 is transport.
+  safety (whitelist/redirect, STOP, consent) is untouched — v3 is transport.
 
 ## 8. Config & secrets
 
 - Secrets: `SologicalSms:SmsCentral:User|Password`, per-channel
-  `SologicalSms:Webhook:{channelKey}`, DB connection (namespace renamed from `SmsV2:` to
+  `SologicalSms:Webhook:{channelKey}`, DB connection (namespace renamed from `SmsV3:` to
   `SologicalSms:` when the first live secret landed — Ray, 2026-07-27). Azure: real Key Vault. **Local: the shared Azure Key Vault emulator**
   (`https://localhost:4997`, container `aiworkforce-keyvault-emulator` — the established
   local secret home across Ray's services). Config pipeline loads KV whenever
@@ -234,7 +234,7 @@ non-2xx/timeouts retry per outbox backoff then `dead` (visible in ops queries + 
 
 The old model ran TWO stateful boxes (`sms` + `smsdr`: IIS + SQL Server + processor each)
 with bespoke replication between them (`ReplicateSmsData`/`ModelReplicateClient`,
-`isFromDr`) because each box WAS the service. v2 separates compute from state, so that
+`isFromDr`) because each box WAS the service. v3 separates compute from state, so that
 whole apparatus retires — **HA becomes a platform concern**, provided the design keeps the
 app-level invariants that make stateless scale-out true:
 
@@ -245,7 +245,7 @@ app-level invariants that make stateless scale-out true:
 | Upstream down | messages queue and retry with backoff — degrade to delayed, never to lost | design (§4.1 retry mapping) |
 | Ingress down briefly | SMS Central retries un-acked pushes (their duplication contract is our dedup contract, §5); short outages self-heal | design |
 | Database | Azure PostgreSQL Flexible Server zone-redundant HA option + PITR backups; no hand-rolled replication, ever | infra/runbook |
-| DNS | one stable ingress hostname; at S5 BOTH legacy names (`sms.` and `smsdr.sological.com.au`) point at the same v2 service | infra |
+| DNS | one stable ingress hostname; at S5 BOTH legacy names (`sms.` and `smsdr.sological.com.au`) point at the same v3 service | infra |
 
 Decision left with Ray at S1: which PSQL HA tier to pay for now (dev can ride
 single-zone + PITR; flip to zone-redundant before real customer migration at S5).
