@@ -265,14 +265,14 @@ The AI-Workforce Azure dev instance needs v2 reachable in Azure (local docker + 
 serves only the local dev loop). Target per feasibility/§9: Container App beside the
 Billing service, own database `sologicalsms` on the existing Azure PSQL server, real Key
 Vault carrying the same secret names (`SologicalSms--*`), migrations-on-start already
-built for it. Inputs needed from Ray before executing: subscription/resource group +
-container-apps environment (beside Billing?), the Azure PSQL server name (+ HA tier
-decision — dev can ride single-zone + PITR per §9), Key Vault name, ingress hostname for
-the dev instance (the §10 Q3 decision, dev flavor), how images ship (registry/CI), and
-which channels the Azure instance serves (its own AIW dev channels — the ElecDemo* idea —
-vs sharing the local ones; webhook URLs differ per instance). SMS Central webhook forward
-URLs stay pointed at sms-yoga (local) until Ray decides which instance owns upstream
-ingress in dev.
+built for it. **RULED (Ray, 2026-07-31): ALL SHARED resources** — the existing resource
+group/Container Apps environment, the existing Azure PSQL server (new `sologicalsms`
+DATABASE only, no new server; single-zone + PITR for dev per §9), the existing Key Vault
+and registry. Still to decide: dev ingress hostname, image shipping (CI vs manual push —
+CI implies the repo's first git push), and which channels the Azure instance serves (own
+AIW dev channels — the ElecDemo* idea — vs sharing local; webhook URLs differ per
+instance). SMS Central webhook forward URLs stay pointed at sms-yoga (local) until Ray
+decides which instance owns upstream ingress in dev.
 
 ## S7 note (pulled-forward proposal, 2026-07-31 — awaiting Ray's ruling)
 
