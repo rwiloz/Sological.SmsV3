@@ -307,9 +307,12 @@ Verified live: POST /api/v1/messages with the channel key → `403 channel_pause
    Same `reference`=`$metadata.get('REFERENCE')` unresolved-literal quirk as local —
    harmless (mtId chain does correlation). No dedicated inbound number on this
    sub-account yet — Azure = send + delivered-DLRs, replies stay local-dev.
-2. The Azure AIW instance runs pre-S4 code (provider repoint not deployed there) — it can't
-   speak to v3 until the AI-Workforce repo's S4 commits reach Azure via its own CD; its
-   restart then also picks up the new `Sms--Sological--*` KV values.
+2. ~~AIW Azure pre-S4~~ DONE 2026-07-31: AIW CD run 30602404379 deployed the S4 commits;
+   probe of `https://ca-gateway.orangesky-….azurecontainerapps.io/api/sms/webhook`
+   returned `401 invalid signature` — S4 controller live, vault WebhookSecret bound.
+   v3's `AIWorkforce` channel `webhook_url` now points at that gateway URL. Both
+   directions wired: AIW→v3 (BaseUrl+ApiKey from vault) and v3→AIW (webhook_url+HMAC).
+   Azure loop now blocked ONLY by the sender-ID registration in item 1.
 
 **Earlier discovery notes** (setup begun, then paused for the v2→v3 repo rename):
 - Shared-infra names confirmed (from `Billing\ops\infra\container-apps.bicepparam` +
