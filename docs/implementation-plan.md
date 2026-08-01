@@ -394,7 +394,12 @@ management API exposes ops state, AIW admin UI surfaces it; alert delivery TBD.
   inbound number (cost) — deferred. Ray to create the sub-account + provide wrapper creds;
   nothing blocks on it (slot creds into KV after, restart revision).
 
-## S7 note (pulled-forward proposal, 2026-07-31 — awaiting Ray's ruling)
+## S7 note (pulled-forward proposal, 2026-07-31 — SPECCED 2026-08-01)
+
+> **The full spec is [spec-s7-management.md](spec-s7-management.md)** — management API (v3),
+> dedicated "SMS Service" page in AIW admin (Ray's ruling: own page, not a settings tab),
+> ConfigManifest/KV additions, secrets runbook, and the no-psql-config-table ruling.
+> Phase 2 is written as a work order for an agent in the AI-Workforce repo.
 
 Ray proposed: v3 grows a MANAGEMENT API and the admin UI lives in AI-Workforce's admin
 dashboard. Recommended shape: v3 stays the authority (standalone management API, operator-
