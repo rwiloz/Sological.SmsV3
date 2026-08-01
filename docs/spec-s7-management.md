@@ -220,9 +220,16 @@ webhook pair, two-slot channel keys per customer policy.
 
 ## 6. Build order & acceptance
 
-**Phase 1 (this repo):** admin auth + §2 endpoints + tests (auth 401/503 fail-closed, create/rotate
-returns key once, retry resets outbox row, re-arm doesn't unpause, restart endpoint stops host).
-Seed `SologicalSms--Admin--ApiKey` in both vaults. Deploy both environments.
+**Phase 1 (this repo): ✅ BUILT + DEPLOYED 2026-08-01** — admin auth (fail-closed 503, bare-404
+on public hosts, constant-time key), all §2 endpoints, ported config provider/writer
+(`config_entries`, sentinel + in-process ForceReload — settings PUTs apply instantly, not 30s),
+workers on IOptionsMonitor. 135/135 tests (6 new: fail-closed, host-404, channel lifecycle with
+once-only keys, settings door incl. secret-injection rejection, outbox retry + breaker re-arm +
+breaker_active activation block, explorer + cursor paging). Admin keys seeded BOTH vaults
+(local mirrors the value Ray set AIW-side; Azure fresh pair) + `Sms--Sological--AdminBaseUrl`
+(`http://ca-sologicalsms` / `http://localhost:5230`). Breaker AlertNumber now a config_entries
+row in both DBs; bicep/run-local no longer carry it. Restart endpoint untested-by-suite
+(would stop the test host) — verified manually at deploy.
 **Phase 2 (AI-Workforce repo, separate agent):** §3 proxy + page + manifest + emulator seed.
 Acceptance: from the AIW admin UI — pause/unpause a channel, create a channel and copy its key,
 whitelist an originator, browse a message's DR timeline, retry a dead outbox row, re-arm a test-

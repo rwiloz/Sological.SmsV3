@@ -67,6 +67,16 @@ try
     var connectionString = builder.Configuration["SologicalSms:ConnectionStrings:DefaultConnection"]
         ?? "Host=localhost;Database=sologicalsms;Username=postgres;Password=postgres";
 
+    // ── config_entries (S7 spec §0 tier 3; AIW's pattern, ported) ──────────────
+    // Tuning overrides live in the DATABASE (per-environment, deploy-proof; KV stays
+    // secrets/boot-only per Ray's rule). Layered AFTER Key Vault so the table wins.
+    // Loads NOW (fail-hard, same semantics as migrations); sentinel poll + in-process
+    // ForceReload keep IOptionsMonitor consumers current.
+    ((IConfigurationBuilder)builder.Configuration).Add(new Sological.Sms.Service.Data.Configuration.NpgsqlConfigurationSource
+    {
+        ConnectionString = connectionString,
+    });
+
     var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
     dataSourceBuilder.EnableDynamicJson(); // Dictionary<string,string> jsonb payloads
     var dataSource = dataSourceBuilder.Build();
@@ -113,6 +123,11 @@ try
     builder.Services.Configure<BreakerOptions>(builder.Configuration.GetSection(BreakerOptions.SectionName));
     builder.Services.AddScoped<UpstreamBreakerService>();
 
+    // ── Management API (S7 spec §2) ────────────────────────────────────────────
+    builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.SectionName));
+    builder.Services.AddSingleton(sp => new Sological.Sms.Service.Data.Configuration.PostgresConfigurationWriter(
+        connectionString, sp.GetRequiredService<ILogger<Sological.Sms.Service.Data.Configuration.PostgresConfigurationWriter>>()));
+
     // ── Customer webhook egress (S4) ───────────────────────────────────────────
     builder.Services.Configure<EgressOptions>(builder.Configuration.GetSection(EgressOptions.SectionName));
     builder.Services.AddHttpClient(EgressOptions.HttpClientName);
@@ -129,6 +144,7 @@ try
     app.MapMessagesApi();
     app.MapInboundApi();
     app.MapSmsCentralIngress();
+    app.MapAdminApi();
 
     // ── Migrate on startup (same pattern as the sibling services) ──────────────
     using (var scope = app.Services.CreateScope())

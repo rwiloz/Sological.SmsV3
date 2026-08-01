@@ -24,6 +24,7 @@ $user = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--Sms
 $pass = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--SmsCentral--Password?api-version=7.4" -Headers $headers -SkipCertificateCheck).value
 try { $verify = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--Ingress--VerifyKey?api-version=7.4" -Headers $headers -SkipCertificateCheck).value } catch { $verify = "" }
 try { $aiwWebhook = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--Webhook--AIWorkforce?api-version=7.4" -Headers $headers -SkipCertificateCheck).value } catch { $aiwWebhook = "" }
+try { $adminKey = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--Admin--ApiKey?api-version=7.4" -Headers $headers -SkipCertificateCheck).value } catch { $adminKey = "" }
 
 docker build -t sologicalsms:dev $PSScriptRoot\..
 docker rm -f sologicalsms 2>$null | Out-Null
@@ -36,7 +37,7 @@ docker run -d --name sologicalsms `
     -e "SologicalSms__Ingress__VerifyKey=$verify" `
     -e "SologicalSms__Ingress__RequireVerification=true" `
     -e "SologicalSms__Webhook__AIWorkforce=$aiwWebhook" `
-    -e "SologicalSms__Breaker__AlertNumber=+61408004199" `
+    -e "SologicalSms__Admin__ApiKey=$adminKey" `
     --restart unless-stopped `
     sologicalsms:dev
 

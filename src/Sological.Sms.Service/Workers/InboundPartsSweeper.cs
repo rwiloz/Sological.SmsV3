@@ -11,7 +11,7 @@ namespace Sological.Sms.Service.Workers;
 /// Loud by design — a partial flush is a correctness event, never metric-only.</summary>
 public sealed class InboundPartsSweeper(
     IServiceScopeFactory scopeFactory,
-    IOptions<IngressOptions> options,
+    IOptionsMonitor<IngressOptions> options, // monitor: config_entries overrides hot-apply
     ILogger<InboundPartsSweeper> logger) : BackgroundService
 {
     private sealed record StaleGroup(long ChannelId, string FromNumber, string GroupRef);
@@ -35,7 +35,7 @@ public sealed class InboundPartsSweeper(
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(options.Value.SweepIntervalSeconds), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(options.CurrentValue.SweepIntervalSeconds), stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -46,7 +46,7 @@ public sealed class InboundPartsSweeper(
 
     private async Task SweepAsync(CancellationToken ct)
     {
-        var timeout = options.Value.PartTimeoutSeconds;
+        var timeout = options.CurrentValue.PartTimeoutSeconds;
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
 

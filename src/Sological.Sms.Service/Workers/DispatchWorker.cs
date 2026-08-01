@@ -36,7 +36,7 @@ public sealed class DispatchOptions
 public sealed class DispatchWorker(
     IServiceScopeFactory scopeFactory,
     ISmsUpstream upstream,
-    IOptions<DispatchOptions> options,
+    IOptionsMonitor<DispatchOptions> options, // monitor: config_entries overrides hot-apply
     ILogger<DispatchWorker> logger) : BackgroundService
 {
     private readonly string _workerId = $"{Environment.MachineName}:{Guid.NewGuid():N}"[..32];
@@ -61,7 +61,7 @@ public sealed class DispatchWorker(
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(options.Value.PollSeconds), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(options.CurrentValue.PollSeconds), stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -73,7 +73,7 @@ public sealed class DispatchWorker(
 
     private async Task SweepAsync(CancellationToken ct)
     {
-        var o = options.Value;
+        var o = options.CurrentValue;
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
 
@@ -120,7 +120,7 @@ public sealed class DispatchWorker(
 
     private async Task ProcessAsync(SmsDbContext db, Message message, CancellationToken ct)
     {
-        var o = options.Value;
+        var o = options.CurrentValue;
         var channel = message.Channel!;
 
         // A paused channel (or disabled customer) holds its queue — honest wait, not a drop.

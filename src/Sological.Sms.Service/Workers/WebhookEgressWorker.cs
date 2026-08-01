@@ -35,7 +35,7 @@ public sealed class WebhookEgressWorker(
     IServiceScopeFactory scopeFactory,
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
-    IOptions<EgressOptions> options,
+    IOptionsMonitor<EgressOptions> options, // monitor: config_entries overrides hot-apply
     ILogger<WebhookEgressWorker> logger) : BackgroundService
 {
     private readonly string _workerId = $"{Environment.MachineName}:{Guid.NewGuid():N}"[..32];
@@ -60,7 +60,7 @@ public sealed class WebhookEgressWorker(
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(options.Value.PollSeconds), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(options.CurrentValue.PollSeconds), stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -71,7 +71,7 @@ public sealed class WebhookEgressWorker(
 
     private async Task SweepAsync(CancellationToken ct)
     {
-        var o = options.Value;
+        var o = options.CurrentValue;
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
 
@@ -113,7 +113,7 @@ public sealed class WebhookEgressWorker(
 
     private async Task DeliverAsync(SmsDbContext db, WebhookOutboxEntry entry, CancellationToken ct)
     {
-        var o = options.Value;
+        var o = options.CurrentValue;
         var channel = entry.Channel!;
 
         if (string.IsNullOrEmpty(channel.WebhookUrl))
@@ -185,7 +185,7 @@ public sealed class WebhookEgressWorker(
     /// exhausted = dead, loudly — dead rows are visible in ops queries and the S7 report.</summary>
     private async Task DeferAsync(SmsDbContext db, WebhookOutboxEntry entry, CancellationToken ct)
     {
-        var delays = options.Value.ParseRetryDelays();
+        var delays = options.CurrentValue.ParseRetryDelays();
         var attempts = entry.Attempts + 1;
         if (attempts > delays.Length)
         {

@@ -34,12 +34,12 @@ public sealed class BreakerOptions
 public sealed class UpstreamBreakerService(
     SmsDbContext db,
     ISmsUpstream upstream,
-    IOptions<BreakerOptions> options,
+    IOptionsMonitor<BreakerOptions> options, // monitor: config_entries overrides hot-apply
     ILogger<UpstreamBreakerService> logger)
 {
     public async Task RecordUnmatchedAsync(CancellationToken ct)
     {
-        var o = options.Value;
+        var o = options.CurrentValue;
         if (!o.Enabled) return;
 
         var count = await db.Database.SqlQuery<int>($"""
