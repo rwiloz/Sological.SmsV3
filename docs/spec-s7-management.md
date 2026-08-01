@@ -33,6 +33,19 @@ agent in the AI-Workforce repo.
   configured value. Missing/wrong → `401 {"error":"invalid_admin_key"}`. If the service has NO
   admin key configured, every admin route → `503 {"error":"admin_disabled"}` (fail closed).
 - Admin routes sit under the global per-IP rate limit (already shipped); no send-policy.
+- **Internal path only (Ray's question, 2026-08-01: "is an API key sufficient?").** The key is
+  cryptographically fine (256-bit, vault-held, machine-only, fail-closed) — the exposure to remove
+  is REACHABILITY. `/api/admin/*` is served only to requests arriving on a non-public host:
+  config `SologicalSms:Admin:AllowedHosts` (default `ca-sologicalsms,localhost`); requests whose
+  Host is the public hostname → `404` (indistinguishable from no-such-route). The ACA-internal
+  DNS name is unreachable and unspoofable from the internet (public ingress routes bound
+  hostnames only), so the admin surface simply does not exist externally; the key is the second
+  layer, not the only one.
+- **Why not Entra/managed-identity tokens now:** all three container apps share ONE managed
+  identity (`id-aiworkforce-dev`) and one vault — a token proving "caller is that identity"
+  admits Billing too; ceremony, not isolation. UPGRADE TRIGGER (recorded): when apps get per-app
+  identities (production hardening), switch admin auth to audience-bound Entra tokens and retire
+  the shared key.
 - Every mutating admin call logs a structured Serilog line (`AdminAction` + route + payload keys).
   A dedicated `admin_audit` table is FUTURE (mirror AIW's config-audit tab when it earns its keep).
 
@@ -99,8 +112,11 @@ agent in the AI-Workforce repo.
 
 ### 3.1 Server-side proxy (System service)
 - New `Features/Comms/SmsAdmin/SmsAdminController.cs`: routes `/api/sms-admin/{**path}` (GET/POST/
-  PATCH/DELETE) → forward verbatim to `{Sms:Sological:BaseUrl}/api/admin/{path}` with
+  PATCH/DELETE) → forward verbatim to `{Sms:Sological:AdminBaseUrl}/api/admin/{path}` with
   `X-Admin-Key: {Sms:Sological:AdminApiKey}`. `[Authorize(Roles = SystemRoles.AdminOwnerOrService)]`.
+  **`Sms:Sological:AdminBaseUrl` is the INTERNAL address** (`http://ca-sologicalsms` in Azure,
+  `http://localhost:5230` locally — new non-secret manifest/KV value + emulator seed entry) —
+  never the public custom domain, which refuses admin routes (§1).
   30s timeout; pass status + body through unmodified (the UI renders v3's ApiError envelopes);
   502 `{"error":"sms_service_unreachable"}` on transport failure. NO caching, NO local state.
 - Config: `Sms:Sological:AdminApiKey` read via IConfiguration (KV-backed; AIW's push-reload makes
