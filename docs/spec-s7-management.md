@@ -19,12 +19,18 @@ agent in the AI-Workforce repo.
      (`SologicalSms--*` in the shared vault), surfaced through AIW's existing **Keys & Secrets**
      tab by adding entries to `ConfigManifest` (that tab is manifest-driven — never edit its UI).
      Applies on v3 restart (see the restart endpoint, §2.9).
-  3. **Static service tuning** (rate limits, breaker thresholds, retry backoffs) → appsettings/env.
-     Rarely changed, safety-critical, versioned in git. NOT moved to a psql config table — v3 is
-     one service with a seconds-cheap restart; AIW's `system.config_entries` machinery (sentinel
-     polling, push refresh, fleet-wide IOptionsMonitor) earns its complexity across seven services
-     with hot-reload needs v3 doesn't have. Revisit only if operators start tuning rate limits
-     weekly (the trigger for a real config table, not before).
+  3. **Service tuning** (rate limits, breaker thresholds/alert number, retry backoffs) →
+     **KV VALUES** (tier 2), NOT appsettings and NOT bicep env (AMENDED per Ray, 2026-08-01:
+     "a deployment will override them and I'll want different settings in different
+     environments" — bicep/appsettings values are clobbered/frozen by deploys; KV values
+     survive every deploy and differ per environment by construction, one vault each).
+     appsettings keeps SAFE DEFAULTS only; the vault overrides where present (v3's config
+     binder already loads KV over appsettings — zero new code); applies on v3 restart (§2.9
+     button). `SologicalSms__Breaker__AlertNumber` MOVES out of bicep env into KV
+     accordingly. Still NOT a psql config table — its only remaining advantages (hot reload
+     without restart, editing from the SMS page instead of Keys & Secrets) don't justify
+     AIW's `system.config_entries` machinery for one service; trigger to revisit unchanged
+     (§4).
 
 ## 1. Auth (v3 side)
 
@@ -154,6 +160,9 @@ restart" in their description:
 | `SologicalSms:Webhook:AIWorkforce` | yes | yes | v3 signer — **must equal** `Sms:Sological:WebhookSecret` (already in manifest) |
 | `SologicalSms:ConnectionStrings:DefaultConnection` | yes | **no** (`rotation_disabled` — out-of-band with a migration plan, like AIW's conn strings) | v3 |
 | `Sms:Sological:BaseUrl` | no (value) | yes | AIW (already in manifest via 2026-07-26 audit — verify) |
+| `Sms:Sological:AdminBaseUrl` | no (value) | yes | AIW System proxy — INTERNAL address (§3.1) |
+| `SologicalSms:RateLimits:*` (SendPerSecond, SendBurst, GlobalPerMinute, IngressPerMinute, MaxRequestBodyBytes) | no (values) | yes | v3 — per-env tuning, survives deploys; appsettings holds safe defaults |
+| `SologicalSms:Breaker:*` (UnmatchedThreshold, WindowMinutes, AlertNumber, AlertOriginator) | no (values) | yes | v3 — ditto; `AlertNumber` moves here FROM bicep env |
 
 - `ops/seed_keyvault_emulator.ps1`: add `Sms:Sological:AdminApiKey` to `$secretKeys`.
 
@@ -162,11 +171,13 @@ restart" in their description:
 Compared against AIW's model (docs/infrastructure/config/configuration-reference.md): AIW moved
 runtime-tunables to `system.config_entries` because SEVEN services need the same values with
 30s-sentinel/push hot-reload. v3 is one service; its genuinely operational knobs are per-entity
-columns already in its own DB (tier 1 above), and its globals (RateLimits, Breaker, Dispatch,
-Egress) are git-versioned safety parameters applied by a seconds-cheap restart (§2.9 button).
-A config table would add a second source of truth for ~10 rarely-touched values. **Decision: no.**
-Trigger to revisit: operators tuning limits more than ~monthly, or a second v3 replica/service
-appears.
+columns already in its own DB (tier 1 above), and its tuning globals live as KV VALUES (tier 3
+as amended 2026-08-01) — which already deliver Ray's two hard requirements: deploys can never
+override them (bicep carries no tuning), and every environment differs by construction (one
+vault each). What a psql table would still add — hot reload without restart, editing from the
+SMS page instead of Keys & Secrets — doesn't justify AIW's config machinery for one service.
+**Decision: no table; tunables in KV.** Trigger to revisit: operators tuning limits more than
+~monthly, hot-reload becoming a real need, or a second v3 replica/service appears.
 
 ## 5. Secrets runbook (add / update / rotate)
 
