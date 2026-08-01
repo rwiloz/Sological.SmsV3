@@ -20,17 +20,24 @@ agent in the AI-Workforce repo.
      tab by adding entries to `ConfigManifest` (that tab is manifest-driven — never edit its UI).
      Applies on v3 restart (see the restart endpoint, §2.9).
   3. **Service tuning** (rate limits, breaker thresholds/alert number, retry backoffs) →
-     **KV VALUES** (tier 2), NOT appsettings and NOT bicep env (AMENDED per Ray, 2026-08-01:
-     "a deployment will override them and I'll want different settings in different
-     environments" — bicep/appsettings values are clobbered/frozen by deploys; KV values
-     survive every deploy and differ per environment by construction, one vault each).
-     appsettings keeps SAFE DEFAULTS only; the vault overrides where present (v3's config
-     binder already loads KV over appsettings — zero new code); applies on v3 restart (§2.9
-     button). `SologicalSms__Breaker__AlertNumber` MOVES out of bicep env into KV
-     accordingly. Still NOT a psql config table — its only remaining advantages (hot reload
-     without restart, editing from the SMS page instead of Keys & Secrets) don't justify
-     AIW's `system.config_entries` machinery for one service; trigger to revisit unchanged
-     (§4).
+     **psql `service_settings` table in the v3 DB** (RULED, Ray, 2026-08-01, after two
+     amendments): appsettings/bicep are frozen/clobbered by deploys, and **KV is reserved
+     for secrets or key settings required to boot — never general settings**. The DB is the
+     only home meeting all three constraints: deploys never touch it, each environment has
+     its own by construction, and tuning joins entity state in ONE pane (the SMS Service
+     page — Keys & Secrets stays pure). appsettings keeps SAFE DEFAULTS only; the table
+     overrides where rows exist; applies on v3 restart (§2.9 button).
+     `SologicalSms__Breaker__AlertNumber` MOVES out of bicep env into this table.
+     **Follow AIW's existing pattern (Ray, 2026-08-01)** — port, don't reinvent:
+     `config_entries` table (same `(category, key)` shape; category `''`), a port of AIW's
+     `NpgsqlConfigurationProvider` (plain Npgsql pre-DI, layered AFTER KV, sentinel polling
+     30s, tolerates a missing table on first boot) and `PostgresConfigurationWriter` (UPSERT
+     + sentinel bump). Source: `AI-Workforce/backend/02.Infrastructure/.../Services/
+     Configuration/`. Omit only the Service-Bus push shortcut (v3 has no bus; the 30s poll
+     is the same code path AIW falls back to). With options moved to `IOptionsMonitor`,
+     Breaker/Dispatch/Egress changes HOT-APPLY within ~30s; RateLimits + body cap still need
+     restart (limiter and Kestrel limits are constructed at startup) — the API flags which
+     (§2.9).
 
 ## 1. Auth (v3 side)
 
@@ -108,6 +115,16 @@ agent in the AI-Workforce repo.
   channels — the operator re-activates each channel explicitly (§2.3) after investigating.
 
 ### 2.9 Service
+- `GET /api/admin/settings` → the tunable set with `{key, default, override?, effective}` per
+  entry (defaults from the bound options classes; overrides from `service_settings`).
+- `PUT /api/admin/settings/{key}` `{value}` / `DELETE /api/admin/settings/{key}` → upsert/remove
+  an override row. Key must be in the known-tunable whitelist (`SologicalSms:RateLimits:*`,
+  `SologicalSms:Breaker:*`, `SologicalSms:Dispatch:*`, `SologicalSms:Egress:*`,
+  `SologicalSms:Ingress:PartTimeoutSeconds`) — arbitrary keys rejected `unknown_setting`
+  (secrets and connection strings can never ride in through this door). Writes go through the
+  ported `PostgresConfigurationWriter` (UPSERT + sentinel bump). Response carries
+  `"appliesOn": "reload" | "restart"` per key — Breaker/Dispatch/Egress hot-apply via the
+  sentinel (~30s); RateLimits/body-cap need the restart button.
 - `GET /api/admin/usage?customerCode=&month=YYYY-MM` → ledger rollup per channel per day
   (outbound/inbound units) — the billing view.
 - `POST /api/admin/service/restart` → 202, logs loudly, then graceful `IHostApplicationLifetime.
@@ -141,6 +158,7 @@ entry. Route `/system/sms`. Tabs:
 | Inbound | §2.6 | Same explorer pattern; quarantine rows flagged |
 | Whitelist | §2.4 | Add/remove ACMA sender IDs; blocked-delete explains which channel uses it |
 | Outbox | §2.7 | Pending + dead lists; Retry button per dead row |
+| Settings | §2.9 settings | Tunables table: default vs override vs effective; edit/clear override; per-key "applies in ~30s" vs "needs restart" chip + Restart button (double confirm) |
 | Usage | §2.9 usage | Month picker, per-channel/day units table |
 
 Reuse existing admin table/drawer/tab components and the System Settings visual patterns. All
@@ -160,24 +178,24 @@ restart" in their description:
 | `SologicalSms:Webhook:AIWorkforce` | yes | yes | v3 signer — **must equal** `Sms:Sological:WebhookSecret` (already in manifest) |
 | `SologicalSms:ConnectionStrings:DefaultConnection` | yes | **no** (`rotation_disabled` — out-of-band with a migration plan, like AIW's conn strings) | v3 |
 | `Sms:Sological:BaseUrl` | no (value) | yes | AIW (already in manifest via 2026-07-26 audit — verify) |
-| `Sms:Sological:AdminBaseUrl` | no (value) | yes | AIW System proxy — INTERNAL address (§3.1) |
-| `SologicalSms:RateLimits:*` (SendPerSecond, SendBurst, GlobalPerMinute, IngressPerMinute, MaxRequestBodyBytes) | no (values) | yes | v3 — per-env tuning, survives deploys; appsettings holds safe defaults |
-| `SologicalSms:Breaker:*` (UnmatchedThreshold, WindowMinutes, AlertNumber, AlertOriginator) | no (values) | yes | v3 — ditto; `AlertNumber` moves here FROM bicep env |
+| `Sms:Sological:AdminBaseUrl` | no (value) | yes | AIW System proxy — INTERNAL address (§3.1); qualifies under the KV rule as boot wiring (how AIW REACHES the service), same convention as the existing `BaseUrl` |
+
+> **KV rule (Ray, 2026-08-01): the vault holds secrets, or key settings required to boot —
+> never general settings.** Tuning (`RateLimits`, `Breaker`, `Dispatch`, `Egress`) lives in
+> v3's `service_settings` table (§2.9 settings endpoints), NOT here.
 
 - `ops/seed_keyvault_emulator.ps1`: add `Sms:Sological:AdminApiKey` to `$secretKeys`.
 
 ## 4. Ruling: no psql config table for v3
 
-Compared against AIW's model (docs/infrastructure/config/configuration-reference.md): AIW moved
-runtime-tunables to `system.config_entries` because SEVEN services need the same values with
-30s-sentinel/push hot-reload. v3 is one service; its genuinely operational knobs are per-entity
-columns already in its own DB (tier 1 above), and its tuning globals live as KV VALUES (tier 3
-as amended 2026-08-01) — which already deliver Ray's two hard requirements: deploys can never
-override them (bicep carries no tuning), and every environment differs by construction (one
-vault each). What a psql table would still add — hot reload without restart, editing from the
-SMS page instead of Keys & Secrets — doesn't justify AIW's config machinery for one service.
-**Decision: no table; tunables in KV.** Trigger to revisit: operators tuning limits more than
-~monthly, hot-reload becoming a real need, or a second v3 replica/service appears.
+**RULED (Ray, 2026-08-01, three amendments deep): YES — a psql config table, following AIW's
+existing pattern.** The constraint stack that got here: (a) deployments must never override
+operator-set values (kills appsettings/bicep env as the home); (b) each environment needs its
+own values; (c) **KV holds secrets or boot-critical config only — never general settings**
+(kills the KV-values variant); (d) AIW already has a proven pattern — port it, don't invent a
+lite one. So: `config_entries` in the `sologicalsms` DB, ported provider/writer, sentinel
+polling, IOptionsMonitor hot-apply where construction allows (§0 tier 3). Entity state stays
+first-class columns managed by §2 — the table is for service TUNING only.
 
 ## 5. Secrets runbook (add / update / rotate)
 
