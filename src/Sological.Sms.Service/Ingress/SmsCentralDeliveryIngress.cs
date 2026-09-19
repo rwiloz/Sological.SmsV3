@@ -21,7 +21,7 @@ public sealed class SmsCentralDeliveryIngress(
 {
     public async Task<IResult> HandleAsync(HttpContext ctx, CancellationToken ct)
     {
-        var p = await IngressShared.ReadParamsAsync(ctx.Request);
+        var p = await IngressShared.ReadParamsAsync(ctx.Request, logger);
         var failure = IngressShared.CheckVerification(ctx.Request, p, smsCentral.Value, ingressOptions.Value);
         if (failure is not null) return failure;
         IngressShared.RedactCredentials(p);
@@ -194,7 +194,9 @@ public sealed class SmsCentralDeliveryIngress(
     /// recent message fits — ambiguity stays audit-only, loudly.</summary>
     private async Task<Message?> MatchByContentAsync(Dictionary<string, string> p, CancellationToken ct)
     {
-        var content = p.GetValueOrDefault("mtContent", "");
+        // Bodies are stored folded (GsmFold at the send), and the upstream echoes what it sent — with any curly
+        // apostrophe it transliterated; folding the echo the same way makes the two comparable.
+        var content = GsmFold.Apply(p.GetValueOrDefault("mtContent", ""));
         var handset = IngressShared.FirstOf(p, "sourceAddress", "RECIPIENT");
         if (content.Length == 0 || handset.Length == 0)
             return null;
@@ -202,7 +204,9 @@ public sealed class SmsCentralDeliveryIngress(
         var to = "+" + IngressShared.NormalizeNumber(handset);
         var since = DateTimeOffset.UtcNow.AddHours(-72);
         var candidates = await db.Messages
-            .Where(m => m.ToNumber == to && m.Body == content && m.RequestedAt >= since)
+            // Only a message still awaiting its first receipt: one that learned its mtId is served by the mtId rung, and
+            // a repeated identical send inside the window would otherwise read as ambiguous once the first had matched.
+            .Where(m => m.ToNumber == to && m.Body == content && m.RequestedAt >= since && m.UpstreamId == null)
             .OrderByDescending(m => m.RequestedAt)
             .Take(2)
             .ToListAsync(ct);
@@ -211,6 +215,15 @@ public sealed class SmsCentralDeliveryIngress(
             return candidates[0];
         if (candidates.Count > 1)
             logger.LogWarning("DLR content-match ambiguous for ***{Last4} — audit row only", Last4(handset));
+        else
+        {
+            // Name the class, never the text: a character the upstream transliterated before sending is the next
+            // reason an echo will not match (the curly apostrophe was the first).
+            var outside = SmsParts.NonGsm7CodePoints(content);
+            if (outside.Count > 0)
+                logger.LogWarning("DLR content-match found no candidate for ***{Last4}; the echo carries {CodePoints} outside GSM-7",
+                    Last4(handset), string.Join(' ', outside));
+        }
         return null;
     }
 

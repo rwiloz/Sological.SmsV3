@@ -37,7 +37,7 @@ public static class IngressShared
     /// `METADATA.REFERENCE` (the Velocity metadata dump) is promoted to `REFERENCE` so
     /// correlation works if the platform round-trips our uuid there. The returned
     /// dictionary is also the stored payload.</summary>
-    public static async Task<Dictionary<string, string>> ReadParamsAsync(HttpRequest request)
+    public static async Task<Dictionary<string, string>> ReadParamsAsync(HttpRequest request, ILogger logger)
     {
         // Case-insensitive: templated pushes are hand-typed in the portal.
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -64,38 +64,114 @@ public static class IngressShared
             return parameters;
 
         var before = parameters.Count;
-        try
+        var parsed = TryReadJsonObject(raw, parameters, out var error);
+        var repaired = false;
+        if (!parsed)
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(raw);
-            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+            // The webhook engine writes a handset's newline into the JSON string verbatim (a reply that ends
+            // with a blank line) — invalid JSON no parser accepts. Escape the control characters inside the
+            // string literals and read once more; the raw body is kept when even that fails.
+            var escaped = EscapeControlCharactersInStrings(raw);
+            repaired = !ReferenceEquals(escaped, raw);
+            if (repaired && TryReadJsonObject(escaped, parameters, out error))
             {
-                foreach (var property in doc.RootElement.EnumerateObject())
-                {
-                    if (property.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
-                    {
-                        foreach (var child in property.Value.EnumerateObject())
-                            parameters.TryAdd($"{property.Name}.{child.Name}", JsonScalar(child.Value));
-                    }
-                    else
-                    {
-                        parameters.TryAdd(property.Name, JsonScalar(property.Value));
-                    }
-                }
-                if (parameters.TryGetValue("METADATA.REFERENCE", out var reference))
-                    parameters.TryAdd("REFERENCE", reference);
+                parsed = true;
+                logger.LogInformation("Push JSON carried raw control characters inside a string — escaped and parsed");
             }
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            // fall through to raw capture
         }
 
         if (parameters.Count == before)
         {
+            if (parsed)
+                logger.LogWarning("Push JSON contributed no fields (an empty object, or every key shadowed by the query) — raw body kept ({Length} chars, content-type '{ContentType}')",
+                    raw.Length, request.ContentType ?? "");
+            else
+                logger.LogWarning("Push body could not be read as JSON or a form — raw body kept ({Length} chars, content-type '{ContentType}'; the parser stopped at line {Line} position {Position}; control characters escaped: {Repaired})",
+                    raw.Length, request.ContentType ?? "", error?.LineNumber, error?.BytePositionInLine, repaired);
             parameters["_raw"] = raw.Length <= 4000 ? raw : raw[..4000];
             parameters["_contentType"] = request.ContentType ?? "";
         }
         return parameters;
+    }
+
+    /// <summary>Reads a JSON object's members into <paramref name="parameters"/> (one level of nesting flattened as
+    /// <c>parent.child</c>); false when the text is not a JSON object.</summary>
+    private static bool TryReadJsonObject(string json, Dictionary<string, string> parameters, out System.Text.Json.JsonException? error)
+    {
+        error = null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return false;
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                if (property.Value.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    foreach (var child in property.Value.EnumerateObject())
+                        parameters.TryAdd($"{property.Name}.{child.Name}", JsonScalar(child.Value));
+                }
+                else
+                {
+                    parameters.TryAdd(property.Name, JsonScalar(property.Value));
+                }
+            }
+            if (parameters.TryGetValue("METADATA.REFERENCE", out var reference))
+                parameters.TryAdd("REFERENCE", reference);
+            return true;
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            error = ex;
+            return false;
+        }
+    }
+
+    /// <summary>Escapes the control characters found INSIDE JSON string literals (a raw newline, carriage return
+    /// or tab, or any other character below U+0020) so the text parses; everything outside a string is left as it
+    /// is. Returns the same instance when nothing needed escaping.</summary>
+    public static string EscapeControlCharactersInStrings(string json)
+    {
+        StringBuilder? repaired = null;
+        var inString = false;
+        var escaped = false;
+        for (var i = 0; i < json.Length; i++)
+        {
+            var c = json[i];
+            if (inString)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                }
+                else if (c == '\\')
+                {
+                    escaped = true;
+                }
+                else if (c == '"')
+                {
+                    inString = false;
+                }
+                else if (c < ' ')
+                {
+                    repaired ??= new StringBuilder(json.Length + 8).Append(json, 0, i);
+                    repaired.Append(c switch
+                    {
+                        '\n' => "\\n",
+                        '\r' => "\\r",
+                        '\t' => "\\t",
+                        _ => $"\\u{(int)c:x4}",
+                    });
+                    continue;
+                }
+            }
+            else if (c == '"')
+            {
+                inString = true;
+            }
+            repaired?.Append(c);
+        }
+        return repaired?.ToString() ?? json;
     }
 
     private static string JsonScalar(System.Text.Json.JsonElement element)

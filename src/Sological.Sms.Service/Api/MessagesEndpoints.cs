@@ -55,7 +55,14 @@ public static class MessagesEndpoints
             return BadRequest("originator_mismatch",
                 $"This channel sends as '{channel!.Originator}'. One channel per sender ID — use the channel provisioned for that sender.");
 
-        var parts = SmsParts.Count(request.Body);
+        // The body as it will be counted, stored, sent, billed and matched against the upstream's receipt
+        // echo: every character with a GSM-7 equivalent folds onto it (a single curly apostrophe otherwise
+        // sends the whole message UCS-2 at 70 characters a part, and the upstream echoes it transliterated,
+        // so the receipt content match fails — the 2026-09-19 breaker trip on our own sends).
+        var body = GsmFold.Apply(request.Body);
+        if (string.IsNullOrWhiteSpace(body))
+            return BadRequest("invalid_request", "'body' is empty once normalised.");
+        var parts = SmsParts.Count(body);
         if (parts > 7)
             return BadRequest("message_too_long", "Message exceeds 7 SMS parts (the upstream limit).");
 
@@ -76,7 +83,7 @@ public static class MessagesEndpoints
             CustomerRef = request.Reference,
             ToNumber = request.To.Trim(),
             OriginatorUsed = channel.Originator,
-            Body = request.Body,
+            Body = body,
             Parts = parts,
             Upstream = channel.Upstream,
         };

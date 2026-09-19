@@ -1,3 +1,6 @@
+using System.Text;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sological.Sms.Core.Sms;
 using Sological.Sms.Core.Upstream;
 using Sological.Sms.Service.Ingress;
@@ -100,4 +103,58 @@ public class NumberNormalizationTests
     [InlineData("AIWorkforce", "")] // alpha originators normalize to nothing — never match a number
     public void Normalizes(string input, string expected)
         => IngressShared.NormalizeNumber(input).Should().Be(expected);
+}
+
+/// <summary>The push reader survives what the webhook engine actually sends: a handset's trailing newline
+/// written into the JSON string verbatim (invalid JSON no parser accepts) — the 2026-09-19 smoke's two lost
+/// replies, quarantined with an empty body.</summary>
+public class ReadParamsTests
+{
+    private static HttpRequest JsonPost(string body)
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Method = "POST";
+        ctx.Request.ContentType = "application/json";
+        ctx.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body));
+        return ctx.Request;
+    }
+
+    [Fact]
+    public async Task A_raw_newline_inside_a_json_string_is_escaped_and_the_push_parses()
+    {
+        var raw = "{\"moId\":\"mo-1\",\"mtId\":\"mt-1\",\"sourceAddress\":\"+61412000011\"," +
+                  "\"moContent\":\"June Albright, 14 Kanangra Cres, Ruse NSW 2560\n\"}";
+
+        var p = await IngressShared.ReadParamsAsync(JsonPost(raw), NullLogger.Instance);
+
+        p["moContent"].Should().Be("June Albright, 14 Kanangra Cres, Ruse NSW 2560\n", "the reply as the handset sent it");
+        p["sourceAddress"].Should().Be("+61412000011");
+        p.Should().NotContainKey("_raw");
+    }
+
+    [Fact]
+    public async Task Well_formed_json_reads_as_before_and_garbage_keeps_the_raw_body()
+    {
+        var p = await IngressShared.ReadParamsAsync(JsonPost("{\"moContent\":\"line one\\nline two\"}"), NullLogger.Instance);
+        p["moContent"].Should().Be("line one\nline two");
+
+        var garbage = await IngressShared.ReadParamsAsync(JsonPost("not json at all"), NullLogger.Instance);
+        garbage["_raw"].Should().Be("not json at all");
+        garbage["_contentType"].Should().Be("application/json");
+    }
+
+    [Theory]
+    [InlineData("{\"a\":\"x\ny\"}", "{\"a\":\"x\\ny\"}")]
+    [InlineData("{\"a\":\"tab\there\"}", "{\"a\":\"tab\\there\"}")]
+    [InlineData("{\"a\":\"quote \\\" then\nnewline\"}", "{\"a\":\"quote \\\" then\\nnewline\"}")]
+    [InlineData("{\"a\":\"\u0001\"}", "{\"a\":\"\\u0001\"}")]
+    public void Only_control_characters_inside_strings_are_escaped(string raw, string expected)
+        => IngressShared.EscapeControlCharactersInStrings(raw).Should().Be(expected);
+
+    [Fact]
+    public void Text_with_nothing_to_escape_comes_back_as_the_same_instance()
+    {
+        const string json = "{\"a\":1}\n";
+        ReferenceEquals(IngressShared.EscapeControlCharactersInStrings(json), json).Should().BeTrue("the newline is outside the string");
+    }
 }

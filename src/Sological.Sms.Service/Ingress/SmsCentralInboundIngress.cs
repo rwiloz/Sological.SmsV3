@@ -19,7 +19,7 @@ public sealed class SmsCentralInboundIngress(
 {
     public async Task<IResult> HandleAsync(HttpContext ctx, CancellationToken ct)
     {
-        var payload = await IngressShared.ReadParamsAsync(ctx.Request);
+        var payload = await IngressShared.ReadParamsAsync(ctx.Request, logger);
         var failure = IngressShared.CheckVerification(ctx.Request, payload, smsCentral.Value, ingressOptions.Value);
         if (failure is not null) return failure;
         IngressShared.RedactCredentials(payload);

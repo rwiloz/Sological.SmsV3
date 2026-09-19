@@ -1,7 +1,7 @@
 # Implementation plan — slices S1–S7
 
 **Created:** 2026-07-27
-**Modified:** 2026-07-27
+**Modified:** 2026-09-19
 **Status:** design signed off (Ray, 2026-07-27). **S1 DONE (2026-07-27)** — S2 is next; S5–S7 planned.
 
 Rules of the road: each slice lands complete and verified (suite green + the slice's named
@@ -418,6 +418,9 @@ hand SQL. Customer self-service, if ever, is a separate channel-scoped surface.
 > PROXY, accepting the ancient TLS and forwarding to v3's legacy-emulation routes; DNS
 > repoint then only affects modern callers. Inventory which channels' callers have this
 > constraint during the S5 planning pass.
+>
+> The legacy submit path folds the body through `GsmFold` exactly as `POST /api/v1/messages` does (the
+> 2026-09-19 ruling): the counted, stored, sent, billed and receipt-matched text is one text on every lane.
 
 Byte-compatible `isapi/submitsms.dll/sendsms`, `checkstatus`, `getsms` routes mapped onto the
 v3 store (status letters N/S/D/F/E/I; `getsms` consume-once semantics preserved; tab-separated

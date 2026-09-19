@@ -58,11 +58,11 @@ public sealed class IngressIntegrationTests(IngressPostgresFixture fixture)
         return new TestChannel(apiKey, originator, channel.Id);
     }
 
-    private static async Task<Guid> SendToSentAsync(SendLaneFactory factory, HttpClient client, TestChannel ch, string to, string body)
+    private static async Task<Guid> SendToSentAsync(SendLaneFactory factory, HttpClient client, TestChannel ch, string to, string body, string? reference = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/messages")
         {
-            Content = JsonContent.Create(new { to, body }),
+            Content = JsonContent.Create(new { to, body, reference }),
         };
         request.Headers.Add("X-Api-Key", ch.ApiKey);
         var response = await client.SendAsync(request);
@@ -378,6 +378,62 @@ public sealed class IngressIntegrationTests(IngressPostgresFixture fixture)
         }
     }
 
+    [Fact]
+    public async Task Dlr_ContentMatch_SurvivesTheUpstreamsApostropheTransliteration()
+    {
+        // 2026-09-19: the upstream echoes a curly apostrophe as a straight one in mtContent, so the exact match
+        // against the sent body failed and every such receipt counted as unknown — the breaker tripped on our own
+        // sends. The body is folded before it is stored and sent; the echo is folded before the match.
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+        var id = await SendToSentAsync(factory, client, ch, "0412000022", "Thanks, that\u2019s all confirmed.");
+        const string mtId = "5f1e1d3c-1111-4222-8333-444455556666";
+        const string badRef = "$metadata.get('REFERENCE')";
+
+        var dr = "{\"dtId\":\"tr-dr-1\",\"mtId\":\"" + mtId + "\",\"status\":\"delivered\",\"statusCode\":\"220\"," +
+                 "\"sourceAddress\":\"+61412000022\",\"reference\":\"" + badRef + "\",\"mtContent\":\"Thanks, that's all confirmed.\"}";
+        (await (await client.PostAsync("/ingress/smscentral/delivery",
+            new StringContent(dr, Encoding.UTF8, "application/json"))).Content.ReadAsStringAsync()).Should().Be("0");
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+        var message = await db.Messages.SingleAsync(m => m.Id == id);
+        message.Body.Should().Be("Thanks, that's all confirmed.", "stored folded");
+        message.UpstreamId.Should().Be(mtId, "the transliterated echo matched and backfilled mtId");
+        message.Status.Should().Be(MessageStatus.Delivered);
+        (await db.DeliveryEvents.CountAsync(e => e.MessageId == id)).Should().Be(1, "matched — never an unknown receipt");
+    }
+
+    [Fact]
+    public async Task Dlr_RepeatedIdenticalSend_ContentMatchesTheSendStillAwaitingItsReceipt()
+    {
+        // The same text to the same handset twice inside the window: once the first send has learned its mtId, the
+        // second send's first receipt must find ONE candidate — the send still awaiting a receipt — never two.
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+        const string badRef = "$metadata.get('REFERENCE')";
+        var first = await SendToSentAsync(factory, client, ch, "0412000033", "same text twice");
+        await client.PostAsync("/ingress/smscentral/delivery", new StringContent(
+            "{\"dtId\":\"rp-dr-1\",\"mtId\":\"mt-first\",\"status\":\"delivered\",\"statusCode\":\"220\",\"sourceAddress\":\"+61412000033\"," +
+            "\"reference\":\"" + badRef + "\",\"mtContent\":\"same text twice\"}", Encoding.UTF8, "application/json"));
+
+        // A distinct caller reference: the same text to the same handset without one is a duplicate to the dispatch guard.
+        var second = await SendToSentAsync(factory, client, ch, "0412000033", "same text twice", reference: "second-of-two");
+        await client.PostAsync("/ingress/smscentral/delivery", new StringContent(
+            "{\"dtId\":\"rp-dr-2\",\"mtId\":\"mt-second\",\"status\":\"delivered\",\"statusCode\":\"220\",\"sourceAddress\":\"+61412000033\"," +
+            "\"reference\":\"" + badRef + "\",\"mtContent\":\"same text twice\"}", Encoding.UTF8, "application/json"));
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+        (await db.Messages.SingleAsync(m => m.Id == first)).UpstreamId.Should().Be("mt-first");
+        (await db.Messages.SingleAsync(m => m.Id == second)).UpstreamId.Should().Be("mt-second", "the second receipt matched the send still awaiting one");
+        (await db.DeliveryEvents.CountAsync(e => e.MessageId == null)).Should().Be(0, "neither receipt was unknown");
+    }
+
     // ── Inbound receiver ─────────────────────────────────────────────────────
 
     [Fact]
@@ -404,6 +460,39 @@ public sealed class IngressIntegrationTests(IngressPostgresFixture fixture)
         inbound.FromNumber.Should().Be("+61408004199");
         inbound.Body.Should().Be("the actual reply", "moContent, never mtContent");
         inbound.Complete.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Inbound_JsonPushWithARawNewlineInsideTheReply_ParsesRoutesAndForwardsIt()
+    {
+        // 2026-09-19: a reply ending with a blank line arrived with the newline written into the JSON string
+        // verbatim; the reader fell to raw capture, saw no originator and quarantined the reply on the operator
+        // channel with an empty body — never forwarded. It now reads and routes like any other push.
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory, numericOriginator: "0499000555");
+        using (var seed = factory.Services.CreateScope())
+        {
+            var seedDb = seed.ServiceProvider.GetRequiredService<SmsDbContext>();
+            (await seedDb.Channels.SingleAsync(c => c.Id == ch.ChannelId)).WebhookUrl = "https://customer.test/hook";
+            await seedDb.SaveChangesAsync();
+        }
+
+        var json = "{\"moId\":\"nl-mo-1\",\"mtId\":\"1f2e3d4c\",\"sourceAddress\":\"+61408004199\"," +
+                   "\"destinationAddress\":\"+61499000555\",\"mtContent\":\"Please give your full name and the service address.\"," +
+                   "\"moContent\":\"June Albright, 14 Kanangra Cres, Ruse NSW 2560\n\",\"submittedTimestamp\":\"2026-09-19T05:27:19.914Z\"}";
+        var response = await client.PostAsync("/ingress/smscentral/inbound", new StringContent(json, Encoding.UTF8, "application/json"));
+        (await response.Content.ReadAsStringAsync()).Should().Be("0");
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+        var inbound = await db.InboundMessages.SingleAsync(m => m.UpstreamId == "nl-mo-1");
+        inbound.ChannelId.Should().Be(ch.ChannelId, "routed by the dedicated number, not quarantined");
+        inbound.FromNumber.Should().Be("+61408004199");
+        inbound.Body.Should().Be("June Albright, 14 Kanangra Cres, Ruse NSW 2560\n", "the reply as the handset sent it, newline included");
+        (await db.WebhookOutbox.CountAsync(o => o.ChannelId == ch.ChannelId && o.EventType == WebhookEventType.SmsInbound))
+            .Should().Be(1, "forwarded to the channel's webhook");
     }
 
     [Fact]

@@ -213,6 +213,47 @@ public sealed class SendLaneIntegrationTests(SendLanePostgresFixture fixture)
     }
 
     [Fact]
+    public async Task ABodyThatIsNothingOnceFolded_IsRefused()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+        var invisible = char.ConvertFromUtf32(0x200B) + char.ConvertFromUtf32(0xFEFF) + char.ConvertFromUtf32(0x00AD) + " ";
+
+        var response = await PostAsync(client, ch.ApiKey, new { to = "0412345678", body = invisible });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<ApiError>(Json))!.Error.Should().Be("invalid_request");
+        fake.Calls.Should().BeEmpty("nothing to send, nothing billed");
+    }
+
+    [Fact]
+    public async Task CurlyPunctuation_IsFoldedToGsm7_BeforeCountingStoringAndSending()
+    {
+        var fake = new FakeUpstream();
+        await using var factory = new SendLaneFactory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var ch = await SeedAsync(factory);
+
+        // 202 characters with one curly apostrophe: UCS-2 would bill 4 parts (67 a part); folded it is GSM-7, 2 parts.
+        var body = "I\u2019ve sent a code by SMS to the mobile number on your account. " + new string('x', 140);
+        var expected = "I've sent a code by SMS to the mobile number on your account. " + new string('x', 140);
+
+        var response = await PostAsync(client, ch.ApiKey, new { to = "0412345678", body });
+        var accepted = (await response.Content.ReadFromJsonAsync<SendMessageResponse>(Json))!;
+        accepted.Parts.Should().Be(2, "the folded body is GSM-7");
+
+        await WaitForStatusAsync(client, ch.ApiKey, accepted.MessageId, MessageStatus.Sent);
+
+        fake.Calls.Should().ContainSingle().Which.Body.Should().Be(expected, "the folded body is what goes upstream");
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+        (await db.Messages.SingleAsync(m => m.Id == accepted.MessageId)).Body.Should().Be(expected, "the folded body is what is stored");
+        (await db.BillingLedger.SingleAsync(l => l.RefId == accepted.MessageId)).Units.Should().Be(2, "and what is billed");
+    }
+
+    [Fact]
     public async Task ReusedReference_Returns409()
     {
         var fake = new FakeUpstream();

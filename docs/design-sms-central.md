@@ -1,7 +1,7 @@
 # Design — first step: v3 core on SMS Central (slices S1–S4)
 
 **Created:** 2026-07-27
-**Modified:** 2026-07-27
+**Modified:** 2026-09-19
 **Status:** SIGNED OFF (Ray, 2026-07-27) — S1 build started. §10 open questions remain parked with Ray.
 
 ## 1. Shape
@@ -160,6 +160,17 @@ echoed on every webhook; uniqueness per channel enforced (409 on reuse) **on thi
 only** — the S5 legacy emulation must keep accepting duplicate refs, because legacy callers
 reuse them constantly (59k dups/12m on the biggest channel —
 [legacy-db-findings](legacy-db-findings.md)).
+
+**The body is folded before anything else sees it** (`GsmFold`, ruled 2026-09-19): every character
+with a GSM 03.38 equivalent — curly quotes and apostrophes, dashes, the ellipsis, Unicode spaces and
+the tab, zero-width marks, fullwidth ASCII, the Latin ligatures, the backtick (the one plain-ASCII
+character outside the set) — becomes that equivalent; a character with none (an emoji, another
+script, an accented letter outside the set, the joiners) stays, so a body goes UCS-2 only when one
+remains, and the direction marks a handset wraps a pasted number in go only when the rest is GSM-7.
+The folded text is the one text that is counted (`parts` reports it), stored, sent, billed,
+duplicate-guarded and matched against the delivery receipt's echo; a body that is nothing once
+folded is `400 invalid_request`. The customer API never returns the body; the admin plane shows the
+folded one — what the handset received.
 
 ### 6.1a Pre-dispatch guards (product features carried from the legacy processor)
 

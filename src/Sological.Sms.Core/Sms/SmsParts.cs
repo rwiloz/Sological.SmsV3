@@ -15,6 +15,26 @@ public static class SmsParts
     private static readonly HashSet<char> Basic = [.. Gsm7Basic];
     private static readonly HashSet<char> Extension = [.. Gsm7Extension];
 
+    /// <summary>True when every character is in the GSM 03.38 basic or extension set.</summary>
+    public static bool IsGsm7(string body)
+    {
+        foreach (var c in body)
+            if (!Basic.Contains(c) && !Extension.Contains(c)) return false;
+        return true;
+    }
+
+    /// <summary>The distinct UTF-16 units outside the GSM 03.38 set, as U+XXXX in order of first appearance —
+    /// what a log line names to identify a class without quoting a body.</summary>
+    public static IReadOnlyList<string> NonGsm7CodePoints(string body)
+    {
+        var seen = new HashSet<char>();
+        var outside = new List<string>();
+        foreach (var c in body)
+            if (!Basic.Contains(c) && !Extension.Contains(c) && seen.Add(c))
+                outside.Add($"U+{(int)c:X4}");
+        return outside;
+    }
+
     public static short Count(string body)
     {
         var septets = 0;
