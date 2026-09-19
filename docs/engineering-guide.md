@@ -1,7 +1,7 @@
 # Engineering guide — orientation, standards, secrets, working rules
 
 **Created:** 2026-07-27
-**Modified:** 2026-07-27
+**Modified:** 2026-09-19
 
 Tool-neutral onboarding for anyone (human or AI agent) working in this repo. Read the design
 docs first: [feasibility](feasibility.md) (decision + upstream API facts) →
@@ -95,7 +95,10 @@ YARP, seed ratchet) — **does not apply here**. What DOES apply in this repo:
 ## Working rules
 
 - Branch: `main`, commit directly. **No remote push without Ray's explicit ask** (his standing
-  rule; push = deploy once infra exists).
+  rule): a push to `main` IS a deploy — `.github/workflows/cd.yml` builds the image from the pushed
+  commit, tags it with the short SHA, pushes it to the shared dev registry and rolls it out with the
+  bicep, then proves the service answers on its hostname. Hosted CI runs the unit suite only; the
+  integration suite runs locally before the push, as ever.
 - Slice discipline: one slice at a time per the implementation plan; each lands complete
   (suite green + the slice's named gate) or is explicitly parked with Ray's OK.
 - Hosting target: Azure Container Apps beside the Billing service + own database

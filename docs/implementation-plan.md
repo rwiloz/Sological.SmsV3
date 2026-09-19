@@ -281,7 +281,8 @@ also still answers). `/health` = Healthy; migrations ran on first boot.
 `Sms--Sological--BaseUrl` = the custom hostname; the second sub-account's webhook
 forwards should use it too. `ops/infra/container-apps.bicep`
 + `.bicepparam` (modeled on Billing's), image `craiworkforcedev.azurecr.io/sologicalsms:ff6bae5`
-built+pushed manually (no git push — per standing rule). Seeded: 14-row ACMA whitelist,
+built+pushed manually at the time; since 2026-09-19 `.github/workflows/cd.yml` does it on every push to
+`main` (image tagged with the short SHA, the bicep deploy, a hostname probe). Seeded: 14-row ACMA whitelist,
 customer `aiworkforce`, channel `AIWorkforce` (originator `AIWorkforce`, upstream smscentral,
 **status=paused** — the kill-switch stays on until SMS Central creds exist and Ray gates a
 smoke). Operator channel auto-bootstrapped paused. Real KV (`kv-aiworkforce-dev`) carries:

@@ -1,0 +1,91 @@
+name: CD
+
+# Push to main = deploy to azure-dev (the repo's standing rule made literal). The image is built from the
+# pushed commit, tagged with its short SHA, pushed to the shared dev registry and rolled out with the bicep
+# that declares the custom domain and its certificate, so the hostname binding survives the PUT.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  workflow_dispatch:
+
+# Queue deploys per ref, never cancel one mid-flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  ACR_LOGIN_SERVER: craiworkforcedev.azurecr.io
+  RESOURCE_GROUP: rg-aiworkforce-dev
+  SERVICE_HOST: sms.dev.ai-workforce.au
+
+jobs:
+  build-and-deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        run: echo "TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # The unit gate before anything ships. Category=Integration stays local, never on a hosted runner.
+      - name: Pre-deploy unit gate
+        run: dotnet test tests/Sological.Sms.Tests --filter "Category!=Integration" -c Release --verbosity minimal
+
+      - name: Login to Azure
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name craiworkforcedev
+
+      - name: Build and push the image
+        run: |
+          docker build -t "${ACR_LOGIN_SERVER}/sologicalsms:${TAG}" .
+          docker push "${ACR_LOGIN_SERVER}/sologicalsms:${TAG}"
+
+      - name: Deploy the container app
+        run: |
+          az deployment group create \
+            --resource-group "${RESOURCE_GROUP}" \
+            --template-file ops/infra/container-apps.bicep \
+            --parameters ops/infra/container-apps.bicepparam \
+            --parameters imageTag="${TAG}"
+
+      # /health alone once proved nothing: with the hostname binding lost, the gateway wildcard answered it.
+      # A channel-scoped route answers 401 (or 429 under the burst limit) from the SMS service and 404 from
+      # anything else in front of it.
+      - name: Verify the SMS service answers on its hostname
+        run: |
+          for attempt in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://${SERVICE_HOST}/api/v1/inbound" || true)
+            if [ "${code}" = "401" ] || [ "${code}" = "429" ]; then
+              echo "the SMS service answers on ${SERVICE_HOST} (${code})"
+              exit 0
+            fi
+            echo "attempt ${attempt}: ${code}"
+            sleep 10
+          done
+          echo "the SMS service did not answer on ${SERVICE_HOST}"
+          exit 1
