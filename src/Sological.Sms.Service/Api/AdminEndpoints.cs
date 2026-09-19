@@ -123,9 +123,10 @@ public static class AdminEndpoints
                 pending = outbox.FirstOrDefault(o => o.Key == WebhookOutboxState.Pending)?.Count ?? 0,
                 dead = outbox.FirstOrDefault(o => o.Key == WebhookOutboxState.Dead)?.Count ?? 0,
             },
+            // The active breaker's id rides along: the admin page's Re-arm button renders only with one.
             breaker = breaker is null
-                ? new { active = false, trippedAt = (DateTimeOffset?)null, unmatchedCount = (int?)null }
-                : new { active = true, trippedAt = (DateTimeOffset?)breaker.TrippedAt, unmatchedCount = (int?)breaker.UnmatchedCount },
+                ? new { active = false, id = (long?)null, trippedAt = (DateTimeOffset?)null, unmatchedCount = (int?)null }
+                : new { active = true, id = (long?)breaker.Id, trippedAt = (DateTimeOffset?)breaker.TrippedAt, unmatchedCount = (int?)breaker.UnmatchedCount },
             channels,
         });
     }

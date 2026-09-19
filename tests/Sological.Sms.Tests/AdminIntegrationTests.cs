@@ -191,6 +191,14 @@ public sealed class AdminIntegrationTests(SendLanePostgresFixture fixture)
             channelId = channel.Id;
         }
 
+        // The overview names the latched breaker by id — what the admin page's Re-arm button acts on.
+        var overview = await client.SendAsync(AdminRequest(HttpMethod.Get, "/api/admin/overview"));
+        overview.StatusCode.Should().Be(HttpStatusCode.OK);
+        var breakerJson = JsonDocument.Parse(await overview.Content.ReadAsStringAsync()).RootElement.GetProperty("breaker");
+        breakerJson.GetProperty("active").GetBoolean().Should().BeTrue();
+        breakerJson.GetProperty("id").GetInt64().Should().Be(breakerId);
+        breakerJson.GetProperty("unmatchedCount").GetInt32().Should().Be(12);
+
         var retry = await client.SendAsync(AdminRequest(HttpMethod.Post, $"/api/admin/outbox/{outboxId}/retry", new { }));
         retry.StatusCode.Should().Be(HttpStatusCode.OK);
 
