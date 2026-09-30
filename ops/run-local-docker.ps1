@@ -13,10 +13,16 @@ $ErrorActionPreference = "Stop"
 
 $port = 5230
 $network = "ai-workforce-dotnet_ai-workforce-network"   # where airflow-postgres (the shared PG) lives
+$pgHost = "airflow-postgres"
 
 $conn = [Environment]::GetEnvironmentVariable("SologicalSms__ConnectionStrings__DefaultConnection", "User")
 if (-not $conn) { throw "SologicalSms__ConnectionStrings__DefaultConnection (User scope) is not set." }
-$conn = $conn -replace "Host=localhost", "Host=airflow-postgres"
+$conn = $conn -replace "Host=localhost", "Host=$pgHost"
+
+# The service fails hard when the database is unreachable at startup. When Docker restarts the
+# container itself (Docker Desktop restart), the shared PG may not be up yet, so wait for its port
+# before starting. A PG still recovering ("starting up") can cost one more restart; the policy covers it.
+$startCmd = "until (echo > /dev/tcp/$pgHost/5432) 2>/dev/null; do sleep 2; done; exec dotnet Sological.Sms.Service.dll"
 
 $vaultUri = "https://localhost:4997"
 $headers = @{ Authorization = "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJsb2NhbC1kZXYifQ." }
@@ -39,6 +45,7 @@ docker run -d --name sologicalsms `
     -e "SologicalSms__Webhook__AIWorkforce=$aiwWebhook" `
     -e "SologicalSms__Admin__ApiKey=$adminKey" `
     --restart unless-stopped `
-    sologicalsms:dev
+    --entrypoint bash `
+    sologicalsms:dev -c $startCmd
 
 Write-Host "sologicalsms running on http://localhost:$port (health: /health)"
