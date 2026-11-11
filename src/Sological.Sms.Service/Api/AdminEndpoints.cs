@@ -201,13 +201,18 @@ public static class AdminEndpoints
                 $"originator '{request.Originator}' is not on the sender-ID whitelist — add it first.");
 
         var apiKey = NewKey();
+        var channelKey = request.Key.Trim();
+        var webhookUrl = string.IsNullOrWhiteSpace(request.WebhookUrl) ? null : request.WebhookUrl.Trim();
         var channel = new Channel
         {
             Customer = customer,
-            Key = request.Key.Trim(),
+            Key = channelKey,
             Originator = request.Originator,
             Description = request.Description,
-            WebhookUrl = request.WebhookUrl,
+            WebhookUrl = webhookUrl,
+            // A webhook URL without a secret name can never be signed — every event would defer forever
+            // (found 2026-11-11: Azure dev's AIWorkforce channel, created from AI-Workforce's SMS Service page).
+            WebhookSecretName = webhookUrl is null ? null : Channel.DefaultWebhookSecretName(channelKey),
             DailyPartLimit = request.DailyPartLimit,
             AllowedRecipients = request.AllowedRecipients,
             ApiKey1Hash = ApiKeyHasher.Sha256Hex(apiKey),
@@ -252,6 +257,9 @@ public static class AdminEndpoints
                 : [.. recipients.EnumerateArray().Select(e => e.GetString()!)];
         if (root.TryGetProperty("duplicateWindowSeconds", out var window) && window.ValueKind == JsonValueKind.Number)
             channel.DuplicateWindowSeconds = window.GetInt32();
+        // Same rule as create: a webhook URL always has a secret name to sign with.
+        if (!string.IsNullOrEmpty(channel.WebhookUrl) && string.IsNullOrEmpty(channel.WebhookSecretName))
+            channel.WebhookSecretName = Channel.DefaultWebhookSecretName(channel.Key);
 
         await db.SaveChangesAsync(ct);
         return Results.Ok(new

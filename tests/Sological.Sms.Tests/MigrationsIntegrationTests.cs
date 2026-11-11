@@ -1,5 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.DependencyInjection;
 using Sological.Sms.Core.Entities;
 using Sological.Sms.Service.Data;
 using Testcontainers.PostgreSql;
@@ -37,6 +40,38 @@ public sealed class MigrationsIntegrationTests : IAsyncLifetime
         await using (var db = CreateContext())
         {
             await db.Database.MigrateAsync();
+        }
+    }
+
+    [Fact]
+    public async Task WebhookSecretNameRepair_FillsTheConventionOnlyWhereAUrlHasNoName()
+    {
+        await using (var db = CreateContext())
+        {
+            // Up to the migration before the repair, then the rows as the admin API left them.
+            await db.GetInfrastructure().GetRequiredService<IMigrator>().MigrateAsync("20260731112151_SecurityContainment");
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO customers (code, name, status, created_at) VALUES ('repairco', 'Repair Co', 'active', now());
+                INSERT INTO channels (customer_id, key, originator, upstream, status, duplicate_window_seconds, created_at, webhook_url, webhook_secret_name)
+                SELECT id, k, 'shared', 'smscentral', 'active', 3600, now(), u, n FROM customers,
+                  (VALUES ('NoName', 'https://aiw.example/hook', NULL),
+                          ('EmptyName', 'https://aiw.example/hook', ''),
+                          ('Named', 'https://aiw.example/hook', 'SologicalSms:Webhook:Shared'),
+                          ('NoUrl', NULL, NULL)) AS v(k, u, n)
+                WHERE code = 'repairco';
+                """);
+
+            await db.Database.MigrateAsync();
+        }
+
+        await using (var db = CreateContext())
+        {
+            var names = await db.Channels.Where(c => c.Customer!.Code == "repairco")
+                .ToDictionaryAsync(c => c.Key, c => c.WebhookSecretName);
+            names["NoName"].Should().Be("SologicalSms:Webhook:NoName");
+            names["EmptyName"].Should().Be("SologicalSms:Webhook:EmptyName");
+            names["Named"].Should().Be("SologicalSms:Webhook:Shared", "an explicit name is kept");
+            names["NoUrl"].Should().BeNull("nothing to sign");
         }
     }
 

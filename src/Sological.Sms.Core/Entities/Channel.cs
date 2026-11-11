@@ -24,8 +24,12 @@ public class Channel
 
     public string? WebhookUrl { get; set; }
 
-    /// <summary>Secret-store NAME of the webhook HMAC secret (SmsV3:Webhook:{channelKey}) — never the value.</summary>
+    /// <summary>Secret-store NAME of the webhook HMAC secret — never the value. A channel with a webhook URL
+    /// always has one: the admin API fills in <see cref="DefaultWebhookSecretName"/> when none is given.</summary>
     public string? WebhookSecretName { get; set; }
+
+    /// <summary>The naming convention (design §8): `SologicalSms:Webhook:{channelKey}`.</summary>
+    public static string DefaultWebhookSecretName(string channelKey) => $"SologicalSms:Webhook:{channelKey}";
 
     public UpstreamProvider Upstream { get; set; } = UpstreamProvider.SmsCentral;
 

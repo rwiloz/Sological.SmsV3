@@ -120,6 +120,49 @@ public sealed class AdminIntegrationTests(SendLanePostgresFixture fixture)
     }
 
     [Fact]
+    public async Task AChannelWithAWebhookUrl_AlwaysHasASecretNameToSignWith()
+    {
+        // Found 2026-11-11: a channel created from AI-Workforce's SMS Service page got a webhook URL and no
+        // secret name, so every event deferred ("Webhook secret 'null' ... is not resolvable").
+        var fake = new FakeUpstream();
+        await using var factory = Factory(fixture.ConnectionString, fake);
+        var client = factory.CreateClient();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        (await client.SendAsync(AdminRequest(HttpMethod.Post, "/api/admin/customers",
+            new { code = $"cust-{suffix}", name = "Webhook Test" }))).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await client.SendAsync(AdminRequest(HttpMethod.Post, "/api/admin/originators",
+            new { originator = $"TW{suffix[..6]}", description = "test" }))).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // Created with a URL: the convention name is filled in.
+        (await client.SendAsync(AdminRequest(HttpMethod.Post, "/api/admin/channels",
+            new { customerCode = $"cust-{suffix}", key = $"wa-{suffix}", originator = $"TW{suffix[..6]}", webhookUrl = "https://aiw.example/api/sms/webhook" })))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+        // Created without one: no name (nothing to sign).
+        (await client.SendAsync(AdminRequest(HttpMethod.Post, "/api/admin/channels",
+            new { customerCode = $"cust-{suffix}", key = $"wb-{suffix}", originator = $"TW{suffix[..6]}" })))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
+            (await db.Channels.SingleAsync(c => c.Key == $"wa-{suffix}")).WebhookSecretName.Should().Be($"SologicalSms:Webhook:wa-{suffix}");
+            (await db.Channels.SingleAsync(c => c.Key == $"wb-{suffix}")).WebhookSecretName.Should().BeNull();
+        }
+
+        // A URL added later by PATCH gets the convention name too; an explicit name is kept.
+        var patched = await client.SendAsync(AdminRequest(HttpMethod.Patch, $"/api/admin/channels/wb-{suffix}",
+            new { webhookUrl = "https://aiw.example/api/sms/webhook" }));
+        patched.StatusCode.Should().Be(HttpStatusCode.OK);
+        using (var body = JsonDocument.Parse(await patched.Content.ReadAsStringAsync()))
+            body.RootElement.GetProperty("webhookSecretName").GetString().Should().Be($"SologicalSms:Webhook:wb-{suffix}");
+
+        var explicitName = await client.SendAsync(AdminRequest(HttpMethod.Patch, $"/api/admin/channels/wa-{suffix}",
+            new { webhookSecretName = "SologicalSms:Webhook:Shared" }));
+        using (var body = JsonDocument.Parse(await explicitName.Content.ReadAsStringAsync()))
+            body.RootElement.GetProperty("webhookSecretName").GetString().Should().Be("SologicalSms:Webhook:Shared");
+    }
+
+    [Fact]
     public async Task Settings_Door_ValidatesAndHotApplies()
     {
         await using var factory = Factory(fixture.ConnectionString, new FakeUpstream());
