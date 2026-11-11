@@ -470,6 +470,11 @@ upstream and stub handlers — no real MM call.
    v3 whitelist).
 4. Deploy (a push to main) and re-run `ops/run-local-docker.ps1`, then a Ray-approved live smoke to
    his test number through the AI-Workforce channel: send → receipt → reply, on each environment.
+   **Local: send + receipt PASSED 2026-11-11** — two real AI-Workforce MFA codes to Ray's test number
+   (channel `AIWorkforce`, sender `AIWorkforce`): accepted by MM, delivered receipts back through the
+   legacy router (signed, `local:` tag, 2–6 s), message delivered, all four `sms.delivery` webhooks
+   accepted by AI-Workforce first time. OPEN: the reply leg (needs an MM dedicated number on a
+   channel; the `AIWorkforce` sender ID cannot be replied to) and the Azure dev run (needs the push).
 5. Once SMS Central is gone: retire its driver and receivers.
 
 ## S6 — Sinch Engage v1 driver + cutover — ✖ DROPPED 2026-11-11 (Mobile Message replaces it)
