@@ -27,8 +27,9 @@ $startCmd = "until (echo > /dev/tcp/$pgHost/5432) 2>/dev/null; do sleep 2; done;
 
 $vaultUri = "https://localhost:4997"
 $headers = @{ Authorization = "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJsb2NhbC1kZXYifQ." }
-$user = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--SmsCentral--User?api-version=7.4" -Headers $headers -SkipCertificateCheck).value
-$pass = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--SmsCentral--Password?api-version=7.4" -Headers $headers -SkipCertificateCheck).value
+# SMS Central (retired 2026-11-11, still selectable via SologicalSms__Upstream__Provider): optional now.
+try { $user = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--SmsCentral--User?api-version=7.4" -Headers $headers -SkipCertificateCheck).value } catch { $user = "" }
+try { $pass = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--SmsCentral--Password?api-version=7.4" -Headers $headers -SkipCertificateCheck).value } catch { $pass = "" }
 try { $verify = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--Ingress--VerifyKey?api-version=7.4" -Headers $headers -SkipCertificateCheck).value } catch { $verify = "" }
 try { $aiwWebhook = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--Webhook--AIWorkforce?api-version=7.4" -Headers $headers -SkipCertificateCheck).value } catch { $aiwWebhook = "" }
 try { $adminKey = (Invoke-RestMethod -Method Get -Uri "$vaultUri/secrets/SologicalSms--Admin--ApiKey?api-version=7.4" -Headers $headers -SkipCertificateCheck).value } catch { $adminKey = "" }
