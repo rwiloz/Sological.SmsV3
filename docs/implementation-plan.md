@@ -1,7 +1,7 @@
 # Implementation plan — slices S1–S7
 
 **Created:** 2026-07-27
-**Modified:** 2026-09-19
+**Modified:** 2026-11-11
 **Status:** design signed off (Ray, 2026-07-27). **S1 DONE (2026-07-27)** — S2 is next; S5–S7 planned.
 
 Rules of the road: each slice lands complete and verified (suite green + the slice's named
@@ -440,7 +440,39 @@ duplicate refs (legacy callers reuse them heavily) — ref-uniqueness is new-API
 - **Gate:** a captured corpus of real legacy request/response pairs replays identically;
   one pilot customer channel repointed and observed for a week before the rest.
 
-## S6 — Sinch Engage v1 driver + cutover
+## Mobile Message upstream — ✅ BUILT 2026-11-11 (replaces SMS Central; S6 dropped)
+
+Trigger (Ray, 2026-11-11): the main legacy client is gone and the legacy gateway moved to Mobile
+Message (MM) the same day; SMS Central is expected to be dropped. MM has no sub-accounts and the
+one account is tied to Ray's ACMA originating-telco registration, so the legacy app (always on, prod)
+owns the account's two webhook URLs and routes by `custom_ref` tag
+(`Docs/MobileMessage-Router-Brief.md` in the legacy repo). v3 is the dev target (AI-Workforce dev)
+for now; AI-Workforce may later integrate with MM directly, which is a URL change in the router.
+
+Built (design §4.2, §5.3): `MobileMessageUpstream` (global provider switch
+`SologicalSms:Upstream:Provider`, default MobileMessage), `POST /ingress/mobilemessage/status` and
+`/inbound` with MM signature verification, `messages.upstream` recorded at submit, the shared
+delivery transitions and inbound store lifted out of the SMS Central receivers. No migration (the
+new enum value fits the existing column). Suite 193 of 193 (154 before, 39 new) on the fake
+upstream and stub handlers — no real MM call.
+
+**OPEN — needs Ray:**
+1. Key Vault (Azure) and the local emulator: `SologicalSms--MobileMessage--ApiUsername` and
+   `--ApiPassword` (a key pair per environment), `--SigningSecret` (the account's webhook signing
+   secret, the same value as the legacy app's `MobileMessageSigningSecret`; create one in MM's
+   Settings > API if the account has none — v3 refuses unsigned webhooks).
+2. Legacy router config: `dev` → `https://sms.dev.ai-workforce.au/ingress/mobilemessage/status|inbound`,
+   `local` → `https://sms-yoga.sological.io/ingress/mobilemessage/status|inbound`; AIW's dedicated
+   number(s) under `InboundNumber`. ⚠ The router as built checks the number map before the
+   `original_custom_ref` tag; the brief now asks for the tag first (one shared number serving both
+   environments).
+3. Sender IDs: each channel's originator must be registered on the MM account (and stay on the
+   v3 whitelist).
+4. Deploy (a push to main) and re-run `ops/run-local-docker.ps1`, then a Ray-approved live smoke to
+   his test number through the AI-Workforce channel: send → receipt → reply, on each environment.
+5. Once SMS Central is gone: retire its driver and receivers.
+
+## S6 — Sinch Engage v1 driver + cutover — ✖ DROPPED 2026-11-11 (Mobile Message replaces it)
 
 `SinchUpstream` against `au.app.api.sinch.com`: send (`metadata.ref` = message id,
 `delivery_report: true`), webhook receivers (HMAC signature keys) as primary DLR/reply lane,

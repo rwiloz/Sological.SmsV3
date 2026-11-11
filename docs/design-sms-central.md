@@ -1,7 +1,7 @@
 # Design — first step: v3 core on SMS Central (slices S1–S4)
 
 **Created:** 2026-07-27
-**Modified:** 2026-09-19
+**Modified:** 2026-11-11
 **Status:** SIGNED OFF (Ray, 2026-07-27) — S1 build started. §10 open questions remain parked with Ray.
 
 ## 1. Shape
@@ -100,6 +100,30 @@ events. That is the whole cutover surface.
 - Batch (`RECIPIENTMESSAGES`) deliberately NOT used in S2: all-or-nothing rejection semantics
   fight per-message honesty; revisit only if volume demands it.
 
+### 4.2 MobileMessageUpstream (2026-11-11 — the default driver)
+
+Mobile Message (MM) replaces SMS Central as the upstream for every channel; Sinch (S6) is dropped.
+`SologicalSms:Upstream:Provider` picks the driver at startup (`MobileMessage` by default,
+`SmsCentral` still selectable while that account lives). Each message records the provider it was
+actually submitted to (`messages.upstream`, set at submit).
+
+- One account only: MM has no sub-accounts and the account is tied to Ray's ACMA originating-telco
+  registration, so the legacy app, Azure dev and local dev all send through it. The account's
+  single status URL and single inbound URL point at the legacy app (always on), whose router
+  forwards each environment's events (`Docs/MobileMessage-Router-Brief.md` in `C:\Code\Sological.Sms`).
+- `POST https://api.mobilemessage.com.au/v1/messages`, Basic auth (`ApiUsername`/`ApiPassword`;
+  a key pair per environment), one message per request. `to` = E.164 without the plus,
+  `sender` = the channel's originator, `unicode: true` (the send lane has already folded every
+  character with a GSM-7 equivalent, §6.1; MM would strip the rest), `custom_ref` =
+  `{EnvironmentTag}:{message id N}` (`dev` on Azure, `local` on Ray's machine — the router's tag),
+  `Idempotency-Key` = message id (MM replays the original result for 24 h, so a resubmit after a
+  lost response or a lease reclaim never sends twice).
+- Result per message: `success` → `sent` (MM's `message_id` stored as `upstream_id`); `blocked`
+  (the recipient opted out, MM's account-wide list) → `rejected` / `unsubscribed`; `error` →
+  `rejected` / `upstream_error` with MM's text. HTTP 401/403/409/429/5xx and an unreadable 2xx
+  → bounded retry; 400/422 → `rejected`. No credentials or no valid tag → held (`not_configured`),
+  never sent with a ref the router cannot route.
+
 ## 5. SMS Central ingress receivers
 
 Both are GET, both must answer `200` body `0` fast (their retry-on-silence is a duplication
@@ -145,6 +169,31 @@ Routing precedence: `REFERENCE` → message → channel (authoritative for repli
 (never dropped, never 500). Reassembly per §3 `inbound_parts`. STOP/opt-out is NOT handled
 here — opt-out policy is the customer's plane (AI-Workforce comms already owns it); v3 is
 honest transport. (Upstream blacklist additions arrive as 519 rejects and surface as such.)
+
+### 5.3 Mobile Message receivers — `POST /ingress/mobilemessage/status|inbound` (2026-11-11)
+
+The legacy router forwards our environment's events with MM's JSON body and `X-MM-Timestamp` /
+`X-MM-Signature` untouched, so MM's own signature verifies here: lowercase hex HMAC-SHA256 of
+`{timestamp}.{raw body}` with the account's signing secret (`SologicalSms:MobileMessage:SigningSecret`),
+timestamp within 5 minutes. A request that does not verify → 401; no secret configured → 503 (a
+non-2xx the router turns into MM's retry, so events wait out the fix instead of being lost).
+Any 2xx acks.
+
+- **Status** (one receipt per part: `custom_ref`, `message_id`, `status`, `part_number`,
+  `total_parts`): audit row in `delivery_events` (`provider = mobilemessage`), deduped on
+  (`message_id`, `part_number`, `status`) before the ack. Correlation: `custom_ref` with our tag →
+  message; else `message_id` = `upstream_id`. `delivered` → delivered once every part confirmed;
+  `failed` → failed (`part n of t failed`); `sent` interim. Same transitions as §5.1, first
+  terminal verdict wins. A receipt under another environment's tag or for an unknown message is
+  audit-only, 200, and does **not** feed the unmatched-DR breaker: the router already filtered by
+  tag, so an unmatched receipt is a configuration fault, not foreign traffic on our account.
+- **Inbound** (`to` = our number, `sender` = the handset, `message`, `type`, `original_custom_ref`,
+  `original_message_id`): MM reassembles multipart, so one webhook is one message. No id of its own
+  — dedupe on `mm:` + SHA-256 of (sender, to, received_at, type, message). Routing as §5.2:
+  original send (our-tag ref, then `original_message_id`) → its channel; else the dedicated number
+  replied to → its channel; else the operator quarantine channel. `type = unsubscribe` is stored
+  and forwarded like any reply (opt-out policy stays the customer's plane); MM blocks further sends
+  to that number, which come back `unsubscribed`.
 
 ## 6. Customer egress (webhooks) + send API
 
@@ -227,7 +276,8 @@ non-2xx/timeouts retry per outbox backoff then `dead` (visible in ops queries + 
 
 ## 8. Config & secrets
 
-- Secrets: `SologicalSms:SmsCentral:User|Password`, per-channel
+- Secrets: `SologicalSms:MobileMessage:ApiUsername|ApiPassword|SigningSecret` (2026-11-11; a key
+  pair per environment, the signing secret account-wide), `SologicalSms:SmsCentral:User|Password`, per-channel
   `SologicalSms:Webhook:{channelKey}`, DB connection (namespace renamed from `SmsV3:` to
   `SologicalSms:` when the first live secret landed — Ray, 2026-07-27). Azure: real Key Vault. **Local: the shared Azure Key Vault emulator**
   (`https://localhost:4997`, container `aiworkforce-keyvault-emulator` — the established
@@ -240,6 +290,10 @@ non-2xx/timeouts retry per outbox backoff then `dead` (visible in ops queries + 
 - Ingress hostname: needs a public HTTPS name before S3 (e.g. `smsv2.sological.com.au` on the
   container app). Dev (2026-07-27): `sms-yoga.sological.io` — Cloudflare tunnel → the local
   docker container on 127.0.0.1:5230 (`ops/run-local-docker.ps1`). ⚠ Prod name still Ray's.
+- Mobile Message environment tag (not a secret): `SologicalSms:MobileMessage:EnvironmentTag` —
+  `dev` on Azure (bicep env), `local` on the docker container (`ops/run-local-docker.ps1`). The
+  legacy router maps `dev` → `https://sms.dev.ai-workforce.au/ingress/mobilemessage/*` and
+  `local` → `https://sms-yoga.sological.io/ingress/mobilemessage/*`.
 
 ## 9. HA & DR posture (ruled 2026-07-27: platform HA replaces the sms/smsdr pair)
 

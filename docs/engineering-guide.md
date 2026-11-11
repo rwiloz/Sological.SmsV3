@@ -1,7 +1,7 @@
 # Engineering guide — orientation, standards, secrets, working rules
 
 **Created:** 2026-07-27
-**Modified:** 2026-09-19
+**Modified:** 2026-11-11
 
 Tool-neutral onboarding for anyone (human or AI agent) working in this repo. Read the design
 docs first: [feasibility](feasibility.md) (decision + upstream API facts) →
@@ -19,6 +19,8 @@ docs — update them as slices land; tick items visibly, mark open work OPEN.
 |---|---|---|
 | `C:\Code\DelphiSms` | The LIVE 15-year-old Delphi gateway (ISAPI `submitsms.dll`) | `uSubmitSMS.pas` = every legacy client action (sendsms/checkstatus/getsms) **and** the SMS Central DLR/inbound callback handling incl. real captured payloads in comments; `uDMExetelSMS.pas` = processor internals; `SMSWork.sql` = schema archaeology. S5 legacy emulation must match this byte-for-byte. |
 | `C:\Code\Sological.Sms` | C# management/replication stack for the gateway DB | `SmsRepository/*.cs` = the legacy table shapes (SMSMessage/SMSIn/SMSDeliveryStatus/SMSChannel/SMSValidIP); `ServiceSms/Models/ModelReplicate.cs` = DR replication; **`Docs/API-Reference-January2013.pdf` = the SMS Central API reference** (send/DLR/inbound/read/balance + response codes). |
+| [mobile-message-api.md](mobile-message-api.md) + https://mobilemessage.com.au/assets/openapi.json | Mobile Message, the upstream since 2026-11-11 | The driver's contract (design §4.2/§5.3): send, receipts, inbound, signing, sandbox. Start from [mobile-message-getting-started.md](mobile-message-getting-started.md). |
+| `C:\Code\Sological.Sms\Docs\MobileMessage-Router-Brief.md` | The legacy app's MM webhook router | The single MM account's webhooks land on the legacy app, which forwards our environment's events by `custom_ref` tag (`dev`, `local`). Changing a tag or a receiver path means changing the router's config too. |
 | `C:\Code\New.Sms\openapi.json` | Sinch Engage 2.1.0 OpenAPI spec ("Sync") | The S6 driver's contract: `/v1/messages`, `/v1/delivery_reports`+confirm, `/v1/replies`+confirm, `/v1/webhooks/messages`, signature keys. AU instance: `au.app.api.sinch.com`. Official online docs: https://docs.app.api.sinch.com/ (found 2026-07-29; confirms Basic = api_key:api_secret, a support-issued pair — NOT the wrapper username/password). |
 | `C:\Code\AI-Workforce` | Customer #1 (its comms capability consumes our webhooks) | The S4 contract counterpart: `backend/03.Services/AIWorkforce.Services.System/Features/Sms/SmsWebhookController.cs`, `EventHandlers/InboundSmsHandler.cs`, `Features/Comms/CommsDeliveryStatusHandler.cs`, `backend/02.Infrastructure/.../Services/Sms/SologicalSmsProvider.cs`. AI-Workforce-side changes are made in THAT repo, never from here. |
 
@@ -28,8 +30,8 @@ The Sological SMS channels carry **real production SMS for real customers**. Any
 found in the reference repos or the gateway DB are live. Test sends go ONLY to Ray's own test
 number (ask, don't guess), only through the AI-Workforce sub-account channel once it exists.
 Never point this service's ingress/config at the production SMS Central account.
-**Never call the real SMS Central API — not even reads — from tests or ad-hoc runs without
-Ray's explicit approval (his standing rule, 2026-07-27).** Automated tests run on the fake
+**Never call the real SMS Central or Mobile Message API — not even reads — from tests or ad-hoc
+runs without Ray's explicit approval (his standing rule, 2026-07-27).** Automated tests run on the fake
 upstream / stub HTTP handler only; live smokes are Ray-gated, per slice gate.
 
 ## Coding standards
@@ -76,7 +78,8 @@ YARP, seed ratchet) — **does not apply here**. What DOES apply in this repo:
   Ops scripts to crib: AI-Workforce `setup_keyvault_emulator.ps1` / `seed_keyvault_emulator.ps1`.
 - Secret names — canonical namespace is **`SologicalSms:`** (Ray's naming 2026-07-27, set
   when the first live secret landed; supersedes the `SmsV3:` spelling in early drafts):
-  `SologicalSms:SmsCentral:User|Password`, `SologicalSms:Sinch:ApiKey` (S6),
+  `SologicalSms:MobileMessage:ApiUsername|ApiPassword|SigningSecret`,
+  `SologicalSms:SmsCentral:User|Password`, `SologicalSms:Sinch:ApiKey` (S6, dropped),
   `SologicalSms:Webhook:{channelKey}`. Azure = real Key Vault, same names (vault secret
   names spell `:` as `--`, e.g. `SologicalSms--SmsCentral--User`).
 - **DB connection key is namespaced**: `SologicalSms:ConnectionStrings:DefaultConnection`

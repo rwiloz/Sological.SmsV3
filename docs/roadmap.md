@@ -1,9 +1,16 @@
 # Roadmap — SMS Central today → Sinch cutover → RCS
 
 **Created:** 2026-07-27
-**Modified:** 2026-07-27
+**Modified:** 2026-11-11
 **Status:** AGREED direction (Ray, 2026-07-27 sitting); dates indicative except the hard one:
 SMS Central discontinues → Sinch migration must complete **early 2027**.
+
+> **Superseded in part (2026-11-11):** Mobile Message replaces both SMS Central and the Sinch
+> cutover (Phase 2 dropped). The legacy gateway moved to MM that day and owns the single MM
+> account's webhooks, routing each environment's events by `custom_ref` tag; v3 sends through MM
+> as the AI-Workforce dev target. See the implementation plan's Mobile Message section and design
+> §4.2/§5.3. Phase 1 (legacy emulation) is on hold: one low-volume legacy customer remains on the
+> legacy app. RCS (Phase 3) would now be a question for Mobile Message.
 
 ## Phase 0 — Stand up v3 with SMS Central (now)
 

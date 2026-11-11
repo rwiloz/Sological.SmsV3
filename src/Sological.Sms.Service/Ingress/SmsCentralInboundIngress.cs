@@ -64,14 +64,14 @@ public sealed class SmsCentralInboundIngress(
         }
         else
         {
-            var byRecipient = await ResolveByRecipientAsync(to, ct);
+            var byRecipient = await InboundStore.ResolveByRecipientAsync(db, to, ct);
             if (byRecipient is not null)
             {
                 channelId = byRecipient.Value;
             }
             else
             {
-                channelId = await OperatorChannelIdAsync(ct);
+                channelId = await InboundStore.OperatorChannelIdAsync(db, ct);
                 logger.LogWarning("Inbound from ***{Last4} to '{Recipient}' unrouteable — quarantined on the operator channel",
                     Last4(from), to);
             }
@@ -103,55 +103,10 @@ public sealed class SmsCentralInboundIngress(
         return IngressShared.Ack();
     }
 
-    private async Task<long?> ResolveByRecipientAsync(string recipient, CancellationToken ct)
-    {
-        if (recipient.Length == 0) return null;
-        var target = IngressShared.NormalizeNumber(recipient);
-        if (target.Length == 0) return null;
-
-        // Channel counts stay tiny — normalize in memory rather than teaching SQL our rules.
-        var channels = await db.Channels
-            .Where(c => c.Status != ChannelStatus.Retired)
-            .Select(c => new { c.Id, c.Originator })
-            .ToListAsync(ct);
-        return channels.FirstOrDefault(c => IngressShared.NormalizeNumber(c.Originator) == target)?.Id;
-    }
-
-    private long? _operatorChannelId;
-
-    private async Task<long> OperatorChannelIdAsync(CancellationToken ct)
-    {
-        _operatorChannelId ??= (await db.Channels.SingleAsync(c => c.Key == SystemChannels.OperatorKey, ct)).Id;
-        return _operatorChannelId.Value;
-    }
-
-    private async Task StoreInboundAsync(
+    private Task StoreInboundAsync(
         long channelId, string from, string to, string body, string upstreamId,
         Message? replyTo, bool complete, Dictionary<string, string> payload, CancellationToken ct)
-    {
-        var inbound = new InboundMessage
-        {
-            Id = Guid.CreateVersion7(),
-            ChannelId = channelId,
-            FromNumber = from,
-            ToNumber = IngressShared.Truncate(to, 20),
-            Body = body,
-            UpstreamId = IngressShared.Truncate(upstreamId, 64),
-            ReplyToMessageId = replyTo?.Id,
-            ReplyToMessage = replyTo,
-            Complete = complete,
-            Payload = payload,
-        };
-        db.InboundMessages.Add(inbound);
-
-        // Outbox pattern (S4): the customer event commits with the inbound row or not at all.
-        var channel = await db.Channels.FindAsync(new object?[] { channelId }, ct);
-        Egress.WebhookOutbox.EnqueueInbound(db, channel!, inbound, logger);
-
-        await db.SaveChangesAsync(ct);
-        logger.LogInformation("Inbound stored for channel {ChannelId} from ***{Last4} (complete={Complete}, replyTo={ReplyTo})",
-            channelId, Last4(from), complete, replyTo?.Id);
-    }
+        => InboundStore.StoreAsync(db, channelId, from, to, body, upstreamId, replyTo, complete, payload, logger, ct);
 
     /// <summary>Buffers one part; assembles the group when the last part lands. The
     /// pg advisory xact lock serializes concurrent finishers of the same group — plain
@@ -204,5 +159,5 @@ public sealed class SmsCentralInboundIngress(
         await tx.CommitAsync(ct);
     }
 
-    private static string Last4(string number) => number.Length >= 4 ? number[^4..] : number;
+    private static string Last4(string number) => InboundStore.Last4(number);
 }

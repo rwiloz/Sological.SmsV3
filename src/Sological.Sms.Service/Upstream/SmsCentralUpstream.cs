@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Sological.Sms.Core.Entities;
 using Sological.Sms.Core.Upstream;
 
 namespace Sological.Sms.Service.Upstream;
@@ -23,6 +24,8 @@ public sealed class SmsCentralUpstream(
     ILogger<SmsCentralUpstream> logger) : ISmsUpstream
 {
     private static readonly HashSet<string> HardRejects = ["511", "514", "519", "531", "534", "535"];
+
+    public UpstreamProvider Provider => UpstreamProvider.SmsCentral;
 
     public async Task<UpstreamSubmitResult> SubmitAsync(OutboundSms sms, CancellationToken ct)
     {

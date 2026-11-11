@@ -28,7 +28,7 @@ public class EnumStorageTests
         var toStore = converter.ConvertToProviderExpression.Compile();
 
         Enum.GetValues<UpstreamProvider>().Select(toStore)
-            .Should().BeEquivalentTo(["smscentral", "sinch"]);
+            .Should().BeEquivalentTo(["smscentral", "sinch", "mobilemessage"], "16 characters at most (the column)");
     }
 
     [Fact]

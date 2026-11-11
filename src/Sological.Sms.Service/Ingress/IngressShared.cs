@@ -59,9 +59,20 @@ public static class IngressShared
         // push is never silently reduced to {} again.
         string raw;
         using (var reader = new StreamReader(request.Body))
-            raw = (await reader.ReadToEndAsync()).Trim();
+            raw = await reader.ReadToEndAsync();
+        AddJsonBody(raw, parameters, request.ContentType, logger);
+        return parameters;
+    }
+
+    /// <summary>Reads a raw body as a JSON object into <paramref name="parameters"/> (existing keys win), with the
+    /// control-character repair; a body that contributes nothing is kept verbatim under <c>_raw</c>. Shared by the
+    /// SMS Central receivers (after the query) and the Mobile Message receivers (which read the raw bytes first,
+    /// because the signature is computed over them).</summary>
+    public static void AddJsonBody(string body, Dictionary<string, string> parameters, string? contentType, ILogger logger)
+    {
+        var raw = body.Trim();
         if (raw.Length == 0)
-            return parameters;
+            return;
 
         var before = parameters.Count;
         var parsed = TryReadJsonObject(raw, parameters, out var error);
@@ -84,14 +95,13 @@ public static class IngressShared
         {
             if (parsed)
                 logger.LogWarning("Push JSON contributed no fields (an empty object, or every key shadowed by the query) — raw body kept ({Length} chars, content-type '{ContentType}')",
-                    raw.Length, request.ContentType ?? "");
+                    raw.Length, contentType ?? "");
             else
                 logger.LogWarning("Push body could not be read as JSON or a form — raw body kept ({Length} chars, content-type '{ContentType}'; the parser stopped at line {Line} position {Position}; control characters escaped: {Repaired})",
-                    raw.Length, request.ContentType ?? "", error?.LineNumber, error?.BytePositionInLine, repaired);
+                    raw.Length, contentType ?? "", error?.LineNumber, error?.BytePositionInLine, repaired);
             parameters["_raw"] = raw.Length <= 4000 ? raw : raw[..4000];
-            parameters["_contentType"] = request.ContentType ?? "";
+            parameters["_contentType"] = contentType ?? "";
         }
-        return parameters;
     }
 
     /// <summary>Reads a JSON object's members into <paramref name="parameters"/> (one level of nesting flattened as

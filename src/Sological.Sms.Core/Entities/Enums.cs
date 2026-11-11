@@ -23,6 +23,10 @@ public enum UpstreamProvider
 {
     SmsCentral,
     Sinch,
+
+    /// <summary>Mobile Message (2026-11-11): the single account tied to the ACMA originating-telco
+    /// registration; its webhooks reach us through the legacy app's router.</summary>
+    MobileMessage,
 }
 
 public enum MessageStatus

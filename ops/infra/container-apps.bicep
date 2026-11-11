@@ -80,9 +80,13 @@ resource smsService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AzureKeyVault__VaultUri', value: keyVaultUri }
             // Strict SLVERIFY on the SMS Central ingress routes, same as local dev.
             { name: 'SologicalSms__Ingress__RequireVerification', value: 'true' }
+            // Mobile Message routing tag: every send's custom_ref is dev:<id>, and the legacy app's
+            // router forwards receipts and replies carrying it here (/ingress/mobilemessage/*).
+            { name: 'SologicalSms__MobileMessage__EnvironmentTag', value: 'dev' }
             // Tuning (incl. Breaker AlertNumber) deliberately NOT here — it lives in the
             // config_entries table so deploys can never clobber operator settings (S7 §0).
             // Secrets arrive via Key Vault (SologicalSms--ConnectionStrings--DefaultConnection,
+            // --MobileMessage--ApiUsername/--ApiPassword/--SigningSecret,
             // --SmsCentral--User/--Password, --Ingress--VerifyKey, --Webhook--AIWorkforce).
           ]
           probes: [

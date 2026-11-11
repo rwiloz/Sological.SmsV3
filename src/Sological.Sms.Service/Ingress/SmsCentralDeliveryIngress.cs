@@ -134,59 +134,20 @@ public sealed class SmsCentralDeliveryIngress(
                 return; // interim signal — audit row only
 
             case DeliveryVerdict.Delivered:
-                if (message.Status == MessageStatus.Delivered)
-                    return;
-                if (message.Status is MessageStatus.Failed or MessageStatus.Expired or MessageStatus.Rejected)
-                {
-                    // First terminal verdict wins; partial delivery stays visible in delivery_events.
-                    logger.LogWarning("Delivered receipt for message {MessageId} already {Status} — audit only",
-                        message.Id, message.Status);
-                    return;
-                }
-
                 var thisPart = UdhParser.ParseConcat(udh);
-                if (message.Parts > 1 && thisPart is not null &&
-                    await CountDeliveredPartsAsync(message, thisPart.PartNo, ct) < message.Parts)
-                {
-                    return; // this part confirmed; waiting on the rest
-                }
-
-                message.Status = MessageStatus.Delivered;
-                message.DeliveredAt = DateTimeOffset.UtcNow;
-                await EnqueueDeliveryEventAsync(message, ct);
-                logger.LogInformation("Message {MessageId} delivered", message.Id);
+                await DeliveryTransitions.ApplyDeliveredAsync(db, message,
+                    async () => message.Parts <= 1 || thisPart is null ||
+                                await CountDeliveredPartsAsync(message, thisPart.PartNo, ct) >= message.Parts,
+                    logger, ct);
                 return;
 
             case DeliveryVerdict.Failed or DeliveryVerdict.Expired or DeliveryVerdict.Rejected:
-                if (message.Status == MessageStatus.Delivered)
-                {
-                    logger.LogWarning("{Verdict} receipt for message {MessageId} already delivered — audit only",
-                        verdict, message.Id);
-                    return;
-                }
-                if (message.Status is MessageStatus.Failed or MessageStatus.Expired or MessageStatus.Rejected)
-                    return;
-
-                message.Status = verdict switch
-                {
-                    DeliveryVerdict.Expired => MessageStatus.Expired,
-                    DeliveryVerdict.Rejected => MessageStatus.Rejected,
-                    _ => MessageStatus.Failed,
-                };
-                message.ErrorCode = IngressShared.Truncate(rawResult, 32) ?? IngressShared.Truncate(rawStatus, 32);
-                message.ErrorDetail = rawDescription.Length > 0 ? rawDescription : rawStatus;
-                message.FailedAt = DateTimeOffset.UtcNow;
-                await EnqueueDeliveryEventAsync(message, ct);
-                logger.LogWarning("Message {MessageId} {Status}: {Code} {Detail}",
-                    message.Id, message.Status, message.ErrorCode, message.ErrorDetail);
+                await DeliveryTransitions.ApplyUndeliveredAsync(db, message, verdict,
+                    IngressShared.Truncate(rawResult, 32) ?? IngressShared.Truncate(rawStatus, 32),
+                    rawDescription.Length > 0 ? rawDescription : rawStatus,
+                    logger, ct);
                 return;
         }
-    }
-
-    private async Task EnqueueDeliveryEventAsync(Message message, CancellationToken ct)
-    {
-        var channel = await db.Channels.FindAsync(new object?[] { message.ChannelId }, ct);
-        Egress.WebhookOutbox.EnqueueDelivery(db, channel!, message, logger);
     }
 
     /// <summary>First-receipt fallback for wrapper-era sends: the DR echoes the original

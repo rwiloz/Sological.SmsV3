@@ -18,4 +18,17 @@ public static class IngressEndpoints
                 (HttpContext ctx, SmsCentralInboundIngress ingress, CancellationToken ct) => ingress.HandleAsync(ctx, ct))
             .RequireRateLimiting(RateLimitOptions.IngressPolicy);
     }
+
+    /// <summary>The Mobile Message receivers (design §5.3). MM's account has one URL of each kind, which
+    /// point at the legacy app; its router forwards our environment's events here, raw body and X-MM-*
+    /// headers untouched. Any 2xx acks; a non-2xx makes the router answer MM 503, so MM retries.</summary>
+    public static void MapMobileMessageIngress(this WebApplication app)
+    {
+        app.MapPost("/ingress/mobilemessage/status",
+                (HttpContext ctx, MobileMessageStatusIngress ingress, CancellationToken ct) => ingress.HandleAsync(ctx, ct))
+            .RequireRateLimiting(RateLimitOptions.IngressPolicy);
+        app.MapPost("/ingress/mobilemessage/inbound",
+                (HttpContext ctx, MobileMessageInboundIngress ingress, CancellationToken ct) => ingress.HandleAsync(ctx, ct))
+            .RequireRateLimiting(RateLimitOptions.IngressPolicy);
+    }
 }

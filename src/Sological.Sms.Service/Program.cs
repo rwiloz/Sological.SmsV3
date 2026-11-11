@@ -92,15 +92,27 @@ try
     builder.Services.ConfigureHttpJsonOptions(o =>
         o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase)));
     builder.Services.Configure<SmsCentralOptions>(builder.Configuration.GetSection(SmsCentralOptions.SectionName));
+    builder.Services.Configure<MobileMessageOptions>(builder.Configuration.GetSection(MobileMessageOptions.SectionName));
     builder.Services.Configure<DispatchOptions>(builder.Configuration.GetSection(DispatchOptions.SectionName));
     builder.Services.AddHttpClient<SmsCentralUpstream>();
-    builder.Services.AddTransient<ISmsUpstream>(sp => sp.GetRequiredService<SmsCentralUpstream>());
+    builder.Services.AddHttpClient<MobileMessageUpstream>(c => c.Timeout = TimeSpan.FromSeconds(30));
+    // One provider for every channel (2026-11-11), chosen at startup: Mobile Message unless configured back.
+    var upstreamProvider = (builder.Configuration.GetSection(UpstreamOptions.SectionName).Get<UpstreamOptions>() ?? new()).Provider;
+    builder.Services.AddTransient<ISmsUpstream>(sp => upstreamProvider switch
+    {
+        UpstreamProvider.SmsCentral => sp.GetRequiredService<SmsCentralUpstream>(),
+        UpstreamProvider.MobileMessage => sp.GetRequiredService<MobileMessageUpstream>(),
+        _ => throw new InvalidOperationException($"{UpstreamOptions.SectionName}:Provider '{upstreamProvider}' has no driver"),
+    });
+    Log.Information("Upstream provider: {Provider}", upstreamProvider);
     builder.Services.AddHostedService<DispatchWorker>();
 
     // ── Upstream ingress (S3) ──────────────────────────────────────────────────
     builder.Services.Configure<IngressOptions>(builder.Configuration.GetSection(IngressOptions.SectionName));
     builder.Services.AddScoped<SmsCentralDeliveryIngress>();
     builder.Services.AddScoped<SmsCentralInboundIngress>();
+    builder.Services.AddScoped<MobileMessageStatusIngress>();
+    builder.Services.AddScoped<MobileMessageInboundIngress>();
     builder.Services.AddHostedService<InboundPartsSweeper>();
 
     // ── Public-surface protection (2026-07-31 slice) ───────────────────────────
@@ -144,6 +156,7 @@ try
     app.MapMessagesApi();
     app.MapInboundApi();
     app.MapSmsCentralIngress();
+    app.MapMobileMessageIngress();
     app.MapAdminApi();
 
     // ── Migrate on startup (same pattern as the sibling services) ──────────────

@@ -28,9 +28,12 @@ public sealed class SendLanePostgresFixture : IAsyncLifetime
 }
 
 /// <summary>Thread-safe scripted upstream: dequeues scripted results, then accepts.</summary>
-internal sealed class FakeUpstream : ISmsUpstream
+internal sealed class FakeUpstream(UpstreamProvider provider = UpstreamProvider.MobileMessage) : ISmsUpstream
 {
     private readonly object _sync = new();
+
+    public UpstreamProvider Provider => provider;
+
     private readonly Queue<UpstreamSubmitResult> _scripted = new();
     private readonly List<OutboundSms> _calls = [];
 

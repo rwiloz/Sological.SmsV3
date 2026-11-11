@@ -78,8 +78,9 @@ public sealed class DispatchWorker(
         var db = scope.ServiceProvider.GetRequiredService<SmsDbContext>();
 
         // Claim a batch: fresh queued rows, due retries, and lease-expired claims from dead
-        // replicas ('submitting' rows whose claim went stale — resubmission is safe because
-        // REFERENCE = uuid makes the upstream 513-dedupe our idempotency net).
+        // replicas ('submitting' rows whose claim went stale — resubmission is safe because the
+        // message uuid is the upstream's dedupe handle: SMS Central's REFERENCE 513 rule, Mobile
+        // Message's Idempotency-Key).
         var ids = await db.Database.SqlQuery<Guid>($"""
             UPDATE messages SET claimed_by = {_workerId}, claimed_at = now()
             WHERE id IN (
@@ -233,6 +234,7 @@ public sealed class DispatchWorker(
         }
 
         message.Status = MessageStatus.Submitting;
+        message.Upstream = upstream.Provider; // the provider actually used, not the channel's default
         await db.SaveChangesAsync(ct);
 
         UpstreamSubmitResult result;
